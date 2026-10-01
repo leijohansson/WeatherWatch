@@ -364,9 +364,19 @@ input[type='range'] {
   cursor: crosshair;
 }
 
+.radar-map.zoomed:not(.drawing) {
+  cursor: grab;
+}
+
+.radar-map-images,
+.radar-map-images .map-label {
+  transform-origin: 0 0;
+}
+
+.radar-map-images,
 .base-map,
 .radar-overlay,
-.radar-map svg {
+.radar-map > svg {
   position: absolute;
   inset: 0;
   display: block;
@@ -384,7 +394,7 @@ input[type='range'] {
   image-rendering: auto;
 }
 
-.radar-map svg {
+.radar-map > svg {
   z-index: 2;
   overflow: visible;
 }
@@ -440,7 +450,8 @@ input[type='range'] {
 .draft-point {
   fill: var(--mint);
   stroke: #fff;
-  stroke-width: 0.2;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
 }
 
 .drawing-hint {

@@ -49,4 +49,38 @@ describe('RadarMap', () => {
     expect(wrapper.emitted('move-vertex-end')?.[0]).toEqual(['home'])
     expect(wrapper.get('.radar-overlay').attributes('crossorigin')).toBe('anonymous')
   })
+
+  it('places corners at the right map position when zoomed, and panning places none', async () => {
+    const wrapper = mount(RadarMap, {
+      props: {
+        areas: [],
+        selectedId: null,
+        drawing: true,
+        draft: [],
+        overlayUrl: null,
+        overlayOpacity: 0.7,
+        rainyAreaIds: new Set(),
+      },
+    })
+    const map = wrapper.get('[data-testid="radar-map"]')
+    vi.spyOn(map.element, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, width: 400, height: 400, right: 400, bottom: 400, x: 0, y: 0, toJSON: () => ({}),
+    })
+    await wrapper.get('button[aria-label="Zoom in"]').trigger('click')
+    expect(wrapper.get('svg[aria-label="Alert areas"]').attributes('viewBox')).toBe('16.666666666666664 16.666666666666664 66.66666666666667 66.66666666666667')
+
+    // The viewport's top-left corner is a sixth of the way into the map at 1.5×.
+    await map.trigger('click', { clientX: 0, clientY: 0 })
+    const [first] = wrapper.emitted('map-click')![0] as [{ x: number; y: number }]
+    expect(first.x).toBeCloseTo(1 / 6, 6)
+    expect(first.y).toBeCloseTo(1 / 6, 6)
+
+    await map.trigger('pointerdown', { button: 0, clientX: 200, clientY: 200 })
+    await map.trigger('pointermove', { clientX: 260, clientY: 200 })
+    await map.trigger('pointerup', {})
+    await map.trigger('click', { clientX: 260, clientY: 200 })
+    expect(wrapper.emitted('map-click')).toHaveLength(1)
+    expect(wrapper.get('svg[aria-label="Alert areas"]').attributes('viewBox')).not.toContain('16.666666666666664 16')
+  })
 })
+
