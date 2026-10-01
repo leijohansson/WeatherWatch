@@ -236,7 +236,7 @@ export function useRadarMonitor(options: MonitorOptions) {
     if (testMode.value) return 'Sample radar'
     if (radarSource.value === 'data.gov.sg') return 'Source · data.gov.sg'
     if (radarSource.value === 'weather.gov.sg') return 'Source · weather.gov.sg'
-    if (radarSource.value === 'legacy') return 'Source · local fallback'
+    if (radarSource.value === 'legacy') return 'Source · weather.gov.sg fallback'
     return 'Source · waiting for radar'
   })
 

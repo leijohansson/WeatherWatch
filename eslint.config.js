@@ -3,7 +3,7 @@ import eslintConfigTypescript from '@vue/eslint-config-typescript'
 import pluginVue from 'eslint-plugin-vue'
 
 export default [
-  { ignores: ['dist/**', 'coverage/**'] },
+  { ignores: ['dist/**', 'coverage/**', '.venv/**', '**/__pycache__/**'] },
   js.configs.recommended,
   ...pluginVue.configs['flat/recommended'],
   ...eslintConfigTypescript(),

@@ -63,6 +63,18 @@ Object.defineProperty(navigator, 'onLine', {
 })
 Element.prototype.setPointerCapture = vi.fn()
 
+// jsdom has no object URLs; tests that need a specific value spy on these.
+Object.defineProperty(URL, 'createObjectURL', {
+  configurable: true,
+  writable: true,
+  value: vi.fn(() => 'blob:test'),
+})
+Object.defineProperty(URL, 'revokeObjectURL', {
+  configurable: true,
+  writable: true,
+  value: vi.fn(),
+})
+
 beforeEach(() => {
   localStorage.clear()
   vi.clearAllMocks()
