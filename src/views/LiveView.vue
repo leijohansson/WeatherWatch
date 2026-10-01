@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import AlertBanner from '@/components/AlertBanner.vue'
 import ForecastSettingsPanel from '@/components/ForecastSettings.vue'
 import LayersPanel from '@/components/LayersPanel.vue'
+import LiveAlertSettings from '@/components/LiveAlertSettings.vue'
 import LiveMap, { type MapSector } from '@/components/LiveMap.vue'
 import LocationEditor from '@/components/LocationEditor.vue'
 import LocationStatus from '@/components/LocationStatus.vue'
 import StrikeColorBar from '@/components/StrikeColorBar.vue'
 import { useGeoLayers } from '@/composables/useGeoLayers'
 import type { useLightningFeed } from '@/composables/useLightningFeed'
+import type { useNotifications } from '@/composables/useNotifications'
 import { useOfficialForecast } from '@/composables/useOfficialForecast'
 import { defaultLiveSettings, newLiveLocation, type AppState } from '@/composables/usePersistence'
 import type { useRadarMonitor } from '@/composables/useRadarMonitor'
@@ -35,6 +38,7 @@ const props = defineProps<{
   ringStates: Record<string, RingState>
   now: number
   route: Route
+  notifications: ReturnType<typeof useNotifications>
 }>()
 const emit = defineEmits<{ navigate: [hash: string] }>()
 
@@ -42,7 +46,7 @@ const layers = computed(() => props.state.live.layers)
 
 // ---- Panels -------------------------------------------------------------------------------
 
-type Panel = 'status' | 'setup' | 'edit' | 'forecast'
+type Panel = 'status' | 'setup' | 'place' | 'edit' | 'forecast'
 const panel = ref<Panel>('status')
 const layersOpen = ref(false)
 const selectedId = ref<string | null>(null)
@@ -51,24 +55,32 @@ const selectedId = ref<string | null>(null)
 
 const draft = ref<LiveLocation | null>(null)
 const draftIsNew = ref(false)
+// Where setup was opened from, to return there when it's done.
+const setupOrigin = ref<Panel>('setup')
 
 function editLocation(location: LiveLocation) {
   draft.value = { ...location }
   draftIsNew.value = false
+  setupOrigin.value = 'setup'
   selectedId.value = location.id
   panel.value = 'edit'
 }
 
+/** Like drawing an area in Watch: place the pin on the map first, then set the ring up. */
 function addLocation() {
-  const centre = mapCentre.value
-  draft.value = newLiveLocation({
-    name: `Location ${props.state.liveLocations.length + 1}`,
-    lat: Number(centre.lat.toFixed(4)),
-    lon: Number(centre.lon.toFixed(4)),
-  })
+  draft.value = null
   draftIsNew.value = true
-  selectedId.value = draft.value.id
-  panel.value = 'edit'
+  setupOrigin.value = panel.value === 'status' ? 'status' : 'setup'
+  layersOpen.value = false
+  panel.value = 'place'
+}
+
+function onMapClick(position: LatLon) {
+  if (panel.value === 'place' && !draft.value) {
+    draft.value = newLiveLocation({ name: `Location ${props.state.liveLocations.length + 1}` })
+    selectedId.value = draft.value.id
+  }
+  if (draft.value) moveDraft(draft.value.id, position)
 }
 
 function saveDraft() {
@@ -77,19 +89,19 @@ function saveDraft() {
   if (index >= 0) props.state.liveLocations.splice(index, 1, { ...draft.value })
   else props.state.liveLocations.push({ ...draft.value })
   draft.value = null
-  panel.value = 'setup'
+  panel.value = setupOrigin.value
 }
 
 function deleteDraft() {
   const id = draft.value?.id
   props.state.liveLocations = props.state.liveLocations.filter((l) => l.id !== id)
   draft.value = null
-  panel.value = 'setup'
+  panel.value = setupOrigin.value
 }
 
 function cancelDraft() {
   draft.value = null
-  panel.value = 'setup'
+  panel.value = setupOrigin.value
 }
 
 function moveDraft(id: string, position: LatLon) {
@@ -211,6 +223,39 @@ const mapSectors = computed<MapSector[]>(() =>
 
 const legendClasses: SectorClass[] = ['discrepancy', 'thunderstorm', 'clear']
 
+// ---- Discrepancy alerts -------------------------------------------------------------------
+
+const discrepancyIds = computed(() =>
+  Object.entries(sectorClasses.value)
+    .filter(([, cls]) => cls === 'discrepancy')
+    .map(([id]) => id),
+)
+let knownDiscrepancies = new Set<string>()
+
+// Picking another sector set or turning the forecast on resets the baseline without an alert:
+// those are the user's own changes, not new weather.
+watch([() => layers.value.sectors, forecastOn], () => {
+  knownDiscrepancies = new Set(discrepancyIds.value)
+})
+
+watch(discrepancyIds, (ids) => {
+  const fresh = ids.filter((id) => !knownDiscrepancies.has(id))
+  knownDiscrepancies = new Set(ids)
+  if (!fresh.length || !forecastOn.value || !props.state.alertTypes.discrepancy) return
+  const names = geometryFor(layers.value.sectors)
+    .filter((sector) => fresh.includes(sector.id))
+    .map((sector) => sector.name)
+  const shown = names.length > 3 ? `${names.slice(0, 3).join(', ')} +${names.length - 3}` : names.join(', ')
+  const prefix = props.feed.testMode.value ? 'Test · ' : ''
+  const official = layers.value.sectors === 'army' ? 'SafeGuardian has not issued CAT 1' : "the 2-hour forecast isn't thundery"
+  props.notifications.sendDiscrepancy(
+    `${prefix}Discrepancy · ${shown}`,
+    `Radar or lightning shows a thunderstorm, but ${official}.`,
+    'live-discrepancy',
+    routeHash('live'),
+  )
+})
+
 // ---- Forecast settings screen -------------------------------------------------------------
 
 // Settings are plain JSON; structuredClone can't copy Vue's reactive proxies.
@@ -236,7 +281,7 @@ function saveForecast() {
 const forecastPreview = computed(() => {
   const set = layers.value.sectors === 'off' ? 'town' : layers.value.sectors
   const counts = sectorCounts(classify(set, clone(forecastDraft)))
-  const name = set === 'army' ? 'Army Cat1' : 'Townships'
+  const name = set === 'army' ? 'Army Sectors' : 'Townships'
   return `${name}: ${counts.discrepancy} discrepancy · ${counts.thunderstorm} thunderstorm · ${counts.clear} clear`
 })
 
@@ -331,6 +376,12 @@ watch(
 </script>
 
 <template>
+  <AlertBanner
+    v-if="notifications.sounding.discrepancy"
+    label="DISCREPANCY ALERT"
+    :alert="notifications.sounding.discrepancy"
+    @acknowledge="notifications.stopTone('discrepancy')"
+  />
   <div class="live-workspace">
     <section class="map-panel live-map-panel">
       <div class="map-toolbar">
@@ -363,10 +414,14 @@ watch(
         :focus-key="focusKey"
         :selected-id="selectedId"
         :draggable-id="draft?.id ?? null"
+        :placing="panel === 'place'"
         @select="selectedId = $event"
         @move="moveDraft"
-        @map-click="draft && moveDraft(draft.id, $event)"
+        @map-click="onMapClick"
       >
+        <div v-if="panel === 'place'" class="drawing-hint">
+          {{ draft ? 'Drag the pin, or click again to move it' : 'Click the map to place the location' }}
+        </div>
         <div class="map-top-left">
           <div class="mobile-layers">
             <button class="layers-button" type="button" @click="layersOpen = !layersOpen">Layers</button>
@@ -382,9 +437,11 @@ watch(
         </div>
         <LayersPanel
           :layers="layers"
+          :collapsed="state.live.layersCollapsed"
           :class="{ open: layersOpen }"
           @forecast-settings="openForecastSettings"
           @close="layersOpen = false"
+          @toggle-collapsed="state.live.layersCollapsed = !state.live.layersCollapsed"
         />
       </LiveMap>
 
@@ -412,8 +469,36 @@ watch(
         :now="now"
         :settings="state.live"
         @setup="panel = 'setup'"
+        @add="addLocation"
         @select="selectedId = $event"
       />
+      <LiveAlertSettings
+        v-if="panel === 'status'"
+        :state="state"
+        :notifications="notifications"
+        :forecast-on="forecastOn"
+      />
+
+      <section v-else-if="panel === 'place'" class="location-setup">
+        <header class="section-heading">
+          <div>
+            <p class="eyebrow">New location</p>
+            <h2>Locations</h2>
+          </div>
+        </header>
+        <div class="drawing-card">
+          <span class="step-number">01</span>
+          <h3>Place your location</h3>
+          <p>Click the map where the location is. Its alert ring follows the pin.</p>
+          <strong>{{ draft ? `Pin placed at ${draft.lat.toFixed(4)}, ${draft.lon.toFixed(4)}` : 'No pin yet' }}</strong>
+          <div class="button-row">
+            <button class="secondary-button" type="button" @click="cancelDraft">Cancel</button>
+            <button class="primary-button" type="button" :disabled="!draft" @click="panel = 'edit'">
+              Continue
+            </button>
+          </div>
+        </div>
+      </section>
 
       <section v-else-if="panel === 'setup'" class="location-setup">
         <header class="section-heading">

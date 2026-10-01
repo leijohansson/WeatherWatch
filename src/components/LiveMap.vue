@@ -31,6 +31,8 @@ const props = defineProps<{
   focusKey: string
   selectedId: string | null
   draggableId: string | null
+  /** Placing a new location: a click drops the pin. */
+  placing?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -253,6 +255,7 @@ defineExpose({ recentre, zoomBy })
   <div
     ref="container"
     class="live-map"
+    :class="{ placing }"
     data-testid="live-map"
     :style="{ background: coastKind === 'land' ? SEA : LAND }"
     @pointerdown="onPointerDown"
@@ -297,7 +300,7 @@ defineExpose({ recentre, zoomBy })
         </g>
       </g>
 
-      <!-- Sector labels (Army Cat1) -->
+      <!-- Sector labels (Army Sectors) -->
       <text
         v-for="label in sectorLabels"
         :key="`label-${label.id}`"

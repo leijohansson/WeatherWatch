@@ -99,6 +99,8 @@ export interface ForecastSettings {
 }
 
 export interface LiveSettings {
+  /** Whether the map's layers panel is minimised (desktop). */
+  layersCollapsed: boolean
   allClearEnabled: boolean
   allClearMinutes: number
   layers: LiveLayers
@@ -107,11 +109,15 @@ export interface LiveSettings {
 
 export type RingState = 'clear' | 'active'
 
+export type AlertKind = 'rain' | 'lightning' | 'discrepancy'
+
 export interface PersistedSettings {
   monitoring: boolean
   overlayOpacity: number
   soundAlerts: boolean
   soundVolume: number
+  /** Each alert type on or off: its desktop notification and its tone. Added in v2. */
+  alertTypes?: Record<AlertKind, boolean>
 }
 
 export interface PersistedStateV1 {

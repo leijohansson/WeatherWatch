@@ -2,6 +2,7 @@ import { reactive, watch } from 'vue'
 import { DEFAULT_RADAR_LEVEL, isRadarLevelChoice } from '@/lib/radarScale'
 import type {
   AlertArea,
+  AlertKind,
   AreaAlertState,
   AlertEvent,
   LiveLocation,
@@ -47,6 +48,7 @@ export function newLiveLocation(overrides: Partial<LiveLocation> = {}): LiveLoca
 
 export function defaultLiveSettings(): LiveSettings {
   return {
+    layersCollapsed: false,
     allClearEnabled: true,
     allClearMinutes: 15,
     layers: {
@@ -73,9 +75,16 @@ export interface AppState {
   overlayOpacity: number
   soundAlerts: boolean
   soundVolume: number
+  alertTypes: Record<AlertKind, boolean>
   liveLocations: LiveLocation[]
   live: LiveSettings
 }
+
+const defaultAlertTypes = (): Record<AlertKind, boolean> => ({
+  rain: true,
+  lightning: true,
+  discrepancy: true,
+})
 
 function defaults(): AppState {
   return {
@@ -84,8 +93,9 @@ function defaults(): AppState {
     alertState: {},
     monitoring: true,
     overlayOpacity: 0.82,
-    soundAlerts: false,
+    soundAlerts: true,
     soundVolume: 70,
+    alertTypes: defaultAlertTypes(),
     liveLocations: [newLiveLocation({ name: 'Central Singapore' })],
     live: defaultLiveSettings(),
   }
@@ -118,6 +128,7 @@ function mergeLiveSettings(saved: Partial<LiveSettings> | undefined): LiveSettin
   const base = defaultLiveSettings()
   const minLevel = saved?.forecast?.radar?.minLevel
   return {
+    layersCollapsed: saved?.layersCollapsed ?? base.layersCollapsed,
     allClearEnabled: saved?.allClearEnabled ?? base.allClearEnabled,
     allClearMinutes: saved?.allClearMinutes ?? base.allClearMinutes,
     layers: { ...base.layers, ...saved?.layers },
@@ -149,8 +160,9 @@ export function readPersistedState(storage: Pick<Storage, 'getItem'> = localStor
       alertState: parsed.alertState ?? {},
       monitoring: parsed.settings?.monitoring ?? true,
       overlayOpacity: parsed.settings?.overlayOpacity ?? 0.82,
-      soundAlerts: parsed.settings?.soundAlerts ?? false,
+      soundAlerts: parsed.settings?.soundAlerts ?? true,
       soundVolume: parsed.settings?.soundVolume ?? 70,
+      alertTypes: { ...defaultAlertTypes(), ...parsed.settings?.alertTypes },
       liveLocations: Array.isArray(parsed.liveLocations)
         ? parsed.liveLocations.map((location) => newLiveLocation(location))
         : [],
@@ -177,6 +189,7 @@ export function usePersistence() {
         overlayOpacity: state.overlayOpacity,
         soundAlerts: state.soundAlerts,
         soundVolume: state.soundVolume,
+        alertTypes: state.alertTypes,
       },
       liveLocations: state.liveLocations,
       live: state.live,

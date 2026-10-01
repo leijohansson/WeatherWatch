@@ -89,61 +89,83 @@ describe('notifications', () => {
     })
   })
 
-  it('plays the bundled sound when sound alerts are enabled', () => {
-    const play = vi.fn(() => Promise.resolve())
-    const pause = vi.fn()
+  function stubAudio() {
+    const created: AudioSpy[] = []
     class AudioSpy {
-      play = play
-      pause = pause
+      play = vi.fn(() => Promise.resolve())
+      pause = vi.fn()
       loop = false
       volume = 1
       currentTime = 0
-      constructor(_url: string) {}
-      addEventListener(_type: string, _listener: () => void) {}
-    }
-    vi.stubGlobal('Audio', AudioSpy)
-    const notifications = useNotifications(ref(true))
-
-    notifications.send({
-      id: 'event',
-      areaId: 'home',
-      areaName: 'Home',
-      reason: 'entry',
-      timestamp: '2026072320150000',
-      intensity: 'heavy',
-      pixelCount: 24,
-      source: 'live',
-    })
-
-    expect(play).toHaveBeenCalledOnce()
-  })
-
-  it('previews at the selected volume and can stop an active alert', async () => {
-    const play = vi.fn(() => Promise.resolve())
-    const pause = vi.fn()
-    class AudioSpy {
-      static latest: AudioSpy | undefined
-      play = play
-      pause = pause
-      loop = false
-      volume = 1
-      currentTime = 0
-      constructor(_url: string) {
-        AudioSpy.latest = this
+      constructor(public src: string) {
+        created.push(this)
       }
       addEventListener(_type: string, _listener: () => void) {}
     }
     vi.stubGlobal('Audio', AudioSpy)
+    return created
+  }
+
+  const rainEvent = {
+    id: 'event',
+    areaId: 'home',
+    areaName: 'Home',
+    reason: 'entry' as const,
+    timestamp: '2026072320150000',
+    intensity: 'heavy' as const,
+    pixelCount: 24,
+    source: 'live' as const,
+  }
+
+  it('loops the rain tone until it is acknowledged', async () => {
+    const audio = stubAudio()
+    const notifications = useNotifications(ref(true))
+
+    notifications.send(rainEvent)
+    await Promise.resolve()
+    expect(audio).toHaveLength(1)
+    expect(audio[0]?.src).toContain('rain-alert')
+    expect(audio[0]?.loop).toBe(true)
+    expect(notifications.playing.rain).toBe(true)
+    expect(notifications.sounding.rain?.title).toBe('Home')
+
+    notifications.stopTone('rain')
+    expect(audio[0]?.pause).toHaveBeenCalledOnce()
+    expect(notifications.playing.rain).toBe(false)
+    expect(notifications.sounding.rain).toBeNull()
+  })
+
+  it('plays the lightning tone once and loops the discrepancy tone', async () => {
+    const audio = stubAudio()
+    const notifications = useNotifications(ref(true))
+
+    notifications.sendLive('Home', 'Ground strike 2 km away', 'tag', '#/live', true)
+    notifications.sendDiscrepancy('Discrepancy · Bedok', 'Radar shows a storm', 'tag', '#/live')
+    await Promise.resolve()
+    expect(audio.map((a) => [a.src.includes('lightning') ? 'lightning' : 'discrepancy', a.loop])).toEqual([
+      ['lightning', false],
+      ['discrepancy', true],
+    ])
+    expect(notifications.sounding.lightning).toBeNull()
+    expect(notifications.sounding.discrepancy?.title).toBe('Discrepancy · Bedok')
+  })
+
+  it('stays silent when alert sounds are off', () => {
+    const audio = stubAudio()
+    const notifications = useNotifications(ref(false))
+    notifications.send(rainEvent)
+    expect(audio).toHaveLength(0)
+    expect(notifications.sounding.rain).toBeNull()
+  })
+
+  it('previews a tone once at the selected volume', async () => {
+    const audio = stubAudio()
     const notifications = useNotifications(ref(true), ref(35))
 
-    notifications.previewAlertSound()
+    notifications.previewTone('lightning')
     await Promise.resolve()
-    expect(AudioSpy.latest?.loop).toBe(false)
-    expect(AudioSpy.latest?.volume).toBe(0.35)
-    expect(notifications.alertPlaying.value).toBe(true)
-
-    notifications.stopAlertSound()
-    expect(pause).toHaveBeenCalledOnce()
-    expect(notifications.alertPlaying.value).toBe(false)
+    expect(audio[0]?.loop).toBe(false)
+    expect(audio[0]?.volume).toBe(0.35)
+    expect(notifications.playing.lightning).toBe(true)
   })
 })

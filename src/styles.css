@@ -977,17 +977,80 @@ button:disabled {
   font-size: 9px;
 }
 
-.stop-alert-button {
-  width: 100%;
-  min-height: 36px;
-  margin-top: 0;
-  border: 1px solid rgba(231, 136, 136, 0.5);
-  border-radius: 2px;
-  background: rgba(231, 136, 136, 0.08);
-  color: #f0a4a4;
+.page-alert-note {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--mint);
+  background: rgba(104, 224, 201, 0.05);
+  color: #a2b6b5;
   font-size: 10px;
-  font-weight: 600;
+}
+
+.alert-banner {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border: 1px solid rgba(255, 116, 140, 0.55);
+  border-radius: 3px;
+  background: #2a0b14;
+  box-shadow: var(--popover-shadow);
+}
+
+.alert-banner > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.alert-banner small {
+  color: var(--act);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.alert-banner strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--cream);
+  font-size: 13px;
+}
+
+.alert-banner p {
+  margin: 2px 0 0;
+  color: #e3b8c1;
+  font-size: 11px;
+}
+
+.alert-banner .primary-button {
+  padding: 0 18px;
+  background: var(--act);
+  color: var(--on-act);
   cursor: pointer;
+}
+
+.alert-banner-pulse {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--act);
+  animation: alertPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes alertPulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 116, 140, 0.5); }
+  50% { box-shadow: 0 0 0 7px rgba(255, 116, 140, 0); opacity: 0.6; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alert-banner-pulse {
+    animation: none;
+  }
 }
 
 .status-message {
@@ -1422,6 +1485,34 @@ footer {
   display: none;
 }
 
+.layers-minimise {
+  margin: -4px -4px 0 0;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.layers-panel.collapsed {
+  padding-bottom: 4px;
+}
+
+.layers-panel.collapsed .layers-body {
+  display: none;
+}
+
+.live-map.placing,
+.live-map.placing:active {
+  cursor: crosshair;
+}
+
+.toggle-row.disabled strong {
+  color: #829c9e;
+}
+
+.live-alert-settings .eyebrow {
+  margin-bottom: 4px;
+}
+
 .layer-group {
   margin: 0;
   padding: 8px 0;
@@ -1437,13 +1528,14 @@ footer {
 
 .segmented {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr 1.35fr 0.65fr;
   border: 1px solid var(--line);
   border-radius: 2px;
 }
 
 .segmented label {
   padding: 6px 0;
+  white-space: nowrap;
   color: #93aaaa;
   font-size: 10px;
   text-align: center;
@@ -2043,6 +2135,23 @@ footer {
 
   .layers-close {
     display: block;
+  }
+
+  .layers-minimise {
+    display: none;
+  }
+
+  .layers-panel.collapsed .layers-body {
+    display: block;
+  }
+
+  .alert-banner {
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .alert-banner p {
+    display: none;
   }
 
   .live-panel {

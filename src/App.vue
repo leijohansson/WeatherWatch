@@ -18,8 +18,12 @@ const notifications = useNotifications(toRef(state, 'soundAlerts'), toRef(state,
 const { route, navigate } = useRoute()
 const now = useNow()
 
+// Alerts only notify and sound on the page they belong to: rain on Watch, lightning and
+// discrepancy on Live. Rain events still go into Watch's history while Live is open.
 function addEvents(events: AlertEvent[]) {
-  for (const event of events) notifications.send(event)
+  if (route.value.mode === 'watch' && state.alertTypes.rain) {
+    for (const event of events) notifications.send(event)
+  }
   state.history.unshift(...events)
   state.history = state.history.slice(0, 50)
 }
@@ -51,7 +55,9 @@ const liveAlerts = useLiveAlerts({
   settings: toRef(state, 'live'),
   testMode: feed.testMode,
   ready: feedReady,
-  notify: notifications.sendLive,
+  notify: (...args) => {
+    if (route.value.mode === 'live' && state.alertTypes.lightning) notifications.sendLive(...args)
+  },
 })
 
 function selectMode(mode: Mode) {
@@ -63,10 +69,17 @@ watch(monitor.testMode, (testing) => {
   if (!testing && feed.testMode.value) void feed.leaveFixture()
 })
 
-// Each mode starts at the top, rather than at the other mode's scroll position.
+// Each mode starts at the top, and the page being left stops sounding its alerts.
 watch(
   () => route.value.mode,
-  () => window.scrollTo?.({ top: 0 }),
+  (mode) => {
+    window.scrollTo?.({ top: 0 })
+    if (mode === 'live') notifications.stopTone('rain')
+    else {
+      notifications.stopTone('lightning')
+      notifications.stopTone('discrepancy')
+    }
+  },
 )
 </script>
 
@@ -109,6 +122,7 @@ watch(
         :ring-states="liveAlerts.ringStates.value"
         :now="now"
         :route="route"
+        :notifications="notifications"
         @navigate="navigate"
       />
       <WatchView

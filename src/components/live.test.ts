@@ -1,6 +1,6 @@
 import { reactive } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import App from '@/App.vue'
 import LayersPanel from './LayersPanel.vue'
 import LocationStatus from './LocationStatus.vue'
@@ -31,9 +31,20 @@ const strikeNear = (ageMin: number, type: Strike['type'] = 'cg'): Strike => ({
 })
 
 describe('layers panel', () => {
+  it('can be minimised and names the Army set Army Sectors', async () => {
+    const layers = reactive(defaultLiveSettings().layers)
+    const wrapper = mount(LayersPanel, { props: { layers, collapsed: false } })
+    expect(wrapper.text()).toContain('Army Sectors')
+    await wrapper.get('.layers-minimise').trigger('click')
+    expect(wrapper.emitted('toggle-collapsed')).toHaveLength(1)
+    await wrapper.setProps({ collapsed: true })
+    expect(wrapper.classes()).toContain('collapsed')
+    expect(wrapper.get('.layers-minimise').attributes('aria-expanded')).toBe('false')
+  })
+
   it('disables the forecast while sectors are off and restores it after', async () => {
     const layers = reactive(defaultLiveSettings().layers)
-    const wrapper = mount(LayersPanel, { props: { layers } })
+    const wrapper = mount(LayersPanel, { props: { layers, collapsed: false } })
     const forecast = () => wrapper.get<HTMLInputElement>('input[aria-label="Recommended forecast"]')
     expect(forecast().element.checked).toBe(true)
 
@@ -119,3 +130,134 @@ describe('live deep link', () => {
     window.location.hash = ''
   })
 })
+
+function storeState(overrides: Record<string, unknown> = {}) {
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      version: 2,
+      areas: [],
+      history: [],
+      alertState: {},
+      settings: { monitoring: false, overlayOpacity: 0.8, soundAlerts: true, soundVolume: 70 },
+      liveLocations: [home],
+      live: {},
+      ...overrides,
+    }),
+  )
+}
+
+describe('adding a location', () => {
+  it('places the pin on the map first, then opens setup', async () => {
+    storeState()
+    window.location.hash = '#/live'
+    const wrapper = mount(App, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.get('.location-status .add-button').trigger('click')
+    expect(wrapper.text()).toContain('Place your location')
+    expect(wrapper.get('[data-testid="live-map"]').classes()).toContain('placing')
+    const continueButton = () => wrapper.findAll('.drawing-card button').find((b) => b.text() === 'Continue')!
+    expect(continueButton().attributes('disabled')).toBeDefined()
+
+    const map = wrapper.get('[data-testid="live-map"]')
+    await map.trigger('pointerdown', { button: 0, clientX: 100, clientY: 100 })
+    await map.trigger('pointerup', { clientX: 100, clientY: 100 })
+    expect(wrapper.text()).toContain('Pin placed at')
+    await continueButton().trigger('click')
+    expect(wrapper.text()).toContain('New location')
+    await wrapper.get('input#location-name').setValue('Office')
+    const save = wrapper.findAll('button').find((b) => b.text() === 'Save location')!
+    await save.trigger('click')
+    expect(wrapper.findAll('.location-card')).toHaveLength(2)
+    expect(wrapper.text()).toContain('Office')
+    wrapper.unmount()
+    window.location.hash = ''
+  })
+})
+
+describe('rain alert tone', () => {
+  function rainyCanvas() {
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
+      drawImage: vi.fn(),
+      getImageData: (_x: number, _y: number, width: number, height: number) => {
+        const data = new Uint8ClampedArray(width * height * 4)
+        for (let i = 0; i < data.length; i += 4) data.set([30, 250, 0, 255], i)
+        return { data }
+      },
+    })) as never
+    vi.stubGlobal(
+      'Audio',
+      class {
+        play = vi.fn(() => Promise.resolve())
+        pause = vi.fn()
+        loop = false
+        volume = 1
+        currentTime = 0
+        addEventListener() {}
+      },
+    )
+  }
+
+  const area = {
+    id: 'home',
+    name: 'Home',
+    color: '#fff',
+    enabled: true,
+    vertices: [
+      { x: 0.4, y: 0.4 },
+      { x: 0.6, y: 0.4 },
+      { x: 0.6, y: 0.6 },
+    ],
+    intensityThreshold: 'moderate',
+    pixelThreshold: 1,
+    notifyNewCell: false,
+  }
+
+  it('sounds on Watch until acknowledged, and stops when leaving Watch', async () => {
+    rainyCanvas()
+    storeState({ areas: [area] })
+    window.location.hash = '#/watch'
+    const wrapper = mount(App, { attachTo: document.body })
+    expect(wrapper.text()).toContain('Alerts only notify and sound while Watch is open.')
+    const sample = wrapper.findAll('.test-card button').find((b) => b.text() === 'Sample frame')!
+
+    await sample.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.alert-banner').text()).toContain('RAIN ALERT')
+    await wrapper.get('.alert-banner button').trigger('click')
+    expect(wrapper.find('.alert-banner').exists()).toBe(false)
+
+    await wrapper.get('.test-card .text-button').trigger('click')
+    await sample.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.alert-banner').exists()).toBe(true)
+    await wrapper.findAll('.mode-tab')[1]!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.alert-banner').exists()).toBe(false)
+    wrapper.unmount()
+    window.location.hash = ''
+  })
+
+  it('stays quiet when rain alerts are off', async () => {
+    rainyCanvas()
+    storeState({
+      areas: [area],
+      settings: {
+        monitoring: false,
+        overlayOpacity: 0.8,
+        soundAlerts: true,
+        soundVolume: 70,
+        alertTypes: { rain: false, lightning: true, discrepancy: true },
+      },
+    })
+    window.location.hash = '#/watch'
+    const wrapper = mount(App, { attachTo: document.body })
+    await wrapper.findAll('.test-card button').find((b) => b.text() === 'Sample frame')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.alert-banner').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Rain entered')
+    wrapper.unmount()
+    window.location.hash = ''
+  })
+})
+

@@ -1,7 +1,21 @@
-import { computed, ref, type Ref } from 'vue'
-import alertSoundUrl from '../../assets/alert.wav'
+import { computed, reactive, ref, type Ref } from 'vue'
+import discrepancyToneUrl from '../../assets/discrepancy-alert.mp3'
+import lightningToneUrl from '../../assets/lightning-alert.mp3'
+import rainToneUrl from '../../assets/rain-alert.mp3'
 import { rainDetail } from '@/lib/alertText'
-import type { AlertEvent } from '@/types'
+import type { AlertEvent, AlertKind } from '@/types'
+
+/** Rain and discrepancy tones repeat until acknowledged; lightning plays once. */
+const TONES: Record<AlertKind, { url: string; loop: boolean }> = {
+  rain: { url: rainToneUrl, loop: true },
+  lightning: { url: lightningToneUrl, loop: false },
+  discrepancy: { url: discrepancyToneUrl, loop: true },
+}
+
+export interface SoundingAlert {
+  title: string
+  body: string
+}
 
 export function useNotifications(soundAlerts?: Ref<boolean>, soundVolume?: Ref<number>) {
   const supported = typeof window !== 'undefined' && 'Notification' in window
@@ -9,9 +23,16 @@ export function useNotifications(soundAlerts?: Ref<boolean>, soundVolume?: Ref<n
     supported ? Notification.permission : 'denied',
   )
   const feedback = ref<string | null>(null)
-  const alertPlaying = ref(false)
-  let alertAudio: HTMLAudioElement | null = null
-  let audioRequest = 0
+  /** Which tones are playing now. */
+  const playing = reactive<Record<AlertKind, boolean>>({ rain: false, lightning: false, discrepancy: false })
+  /** The alert behind each looping tone, for the acknowledge banner. */
+  const sounding = reactive<Record<AlertKind, SoundingAlert | null>>({
+    rain: null,
+    lightning: null,
+    discrepancy: null,
+  })
+  const audio: Partial<Record<AlertKind, HTMLAudioElement>> = {}
+  const requests: Record<AlertKind, number> = { rain: 0, lightning: 0, discrepancy: 0 }
 
   const permissionLabel = computed(() => {
     if (!supported) return 'Not supported'
@@ -37,48 +58,53 @@ export function useNotifications(soundAlerts?: Ref<boolean>, soundVolume?: Ref<n
     }
   }
 
-  function getAlertAudio() {
+  function toneAudio(kind: AlertKind) {
     if (typeof Audio === 'undefined') return null
-    if (alertAudio) return alertAudio
-    alertAudio = new Audio(alertSoundUrl)
-    alertAudio.addEventListener('ended', () => {
-      alertPlaying.value = false
+    const existing = audio[kind]
+    if (existing) return existing
+    const created = new Audio(TONES[kind].url)
+    created.addEventListener('ended', () => {
+      playing[kind] = false
+      sounding[kind] = null
     })
-    return alertAudio
+    audio[kind] = created
+    return created
   }
 
-  function setAlertVolume(audio: HTMLAudioElement) {
-    audio.volume = Math.max(0, Math.min(100, soundVolume?.value ?? 70)) / 100
-  }
-
-  function startAudio(loop: boolean) {
-    const audio = getAlertAudio()
-    if (!audio) return
-    const request = ++audioRequest
-    audio.loop = loop
-    setAlertVolume(audio)
-    audio.currentTime = 0
-    void audio.play().then(() => {
-      if (request === audioRequest) alertPlaying.value = true
+  function startTone(kind: AlertKind, loop: boolean) {
+    const element = toneAudio(kind)
+    if (!element) return
+    const request = ++requests[kind]
+    element.loop = loop
+    element.volume = Math.max(0, Math.min(100, soundVolume?.value ?? 70)) / 100
+    element.currentTime = 0
+    void element.play().then(() => {
+      if (request === requests[kind]) playing[kind] = true
     }).catch(() => {
-      if (request === audioRequest) alertPlaying.value = false
+      if (request === requests[kind]) playing[kind] = false
     })
   }
 
-  function playAlertSound() {
-    if (soundAlerts?.value) startAudio(true)
+  /** Plays an alert's tone when sounds are on; looping tones remember the alert for acknowledging. */
+  function playTone(kind: AlertKind, alert: SoundingAlert) {
+    if (!soundAlerts?.value) return
+    if (TONES[kind].loop) sounding[kind] = alert
+    startTone(kind, TONES[kind].loop)
   }
 
-  function previewAlertSound() {
-    startAudio(false)
+  function previewTone(kind: AlertKind) {
+    startTone(kind, false)
   }
 
-  function stopAlertSound() {
-    if (!alertAudio) return
-    audioRequest += 1
-    alertAudio.pause()
-    alertAudio.currentTime = 0
-    alertPlaying.value = false
+  /** Stops a tone; for looping tones this is the acknowledgement. */
+  function stopTone(kind: AlertKind) {
+    sounding[kind] = null
+    const element = audio[kind]
+    if (!element) return
+    requests[kind] += 1
+    element.pause()
+    element.currentTime = 0
+    playing[kind] = false
   }
 
   async function requestPermission() {
@@ -129,17 +155,22 @@ export function useNotifications(soundAlerts?: Ref<boolean>, soundVolume?: Ref<n
       escalation: 'Rain intensity increased',
       'new-cell': 'A new rain cell appeared',
     }[event.reason]
-    show(`${prefix}${event.areaName}`, {
-      body: `${reason} · ${rainDetail(event, 'threshold met')} · ${event.pixelCount} qualifying pixels`,
-      tag: `${event.source}-${event.areaId}-${event.reason}`,
-    })
-    playAlertSound()
+    const title = `${prefix}${event.areaName}`
+    const body = `${reason} · ${rainDetail(event, 'threshold met')} · ${event.pixelCount} qualifying pixels`
+    show(title, { body, tag: `${event.source}-${event.areaId}-${event.reason}` })
+    playTone('rain', { title, body })
   }
 
-  /** Live mode location alerts: strike in ring and all-clear. */
+  /** Live mode location alerts: strike in ring (with the lightning tone) and all-clear (silent). */
   function sendLive(title: string, body: string, tag: string, href: string, sound: boolean) {
     show(title, { body, tag }, href)
-    if (sound) playAlertSound()
+    if (sound) playTone('lightning', { title, body })
+  }
+
+  /** A sector has become Discrepancy; its tone repeats until acknowledged. */
+  function sendDiscrepancy(title: string, body: string, tag: string, href: string) {
+    show(title, { body, tag }, href)
+    playTone('discrepancy', { title, body })
   }
 
   function sendRadarFailure(message: string) {
@@ -154,12 +185,14 @@ export function useNotifications(soundAlerts?: Ref<boolean>, soundVolume?: Ref<n
     permission,
     permissionLabel,
     feedback,
-    alertPlaying,
+    playing,
+    sounding,
     requestPermission,
     send,
     sendLive,
+    sendDiscrepancy,
     sendRadarFailure,
-    previewAlertSound,
-    stopAlertSound,
+    previewTone,
+    stopTone,
   }
 }

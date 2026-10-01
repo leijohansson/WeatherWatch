@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import AlertBanner from '@/components/AlertBanner.vue'
 import AlertHistory from '@/components/AlertHistory.vue'
 import AreaEditor from '@/components/AreaEditor.vue'
 import RadarMap from '@/components/RadarMap.vue'
@@ -90,6 +91,12 @@ function formatTimestamp(timestamp: string | null) {
 </script>
 
 <template>
+  <AlertBanner
+    v-if="notifications.sounding.rain"
+    label="RAIN ALERT"
+    :alert="notifications.sounding.rain"
+    @acknowledge="notifications.stopTone('rain')"
+  />
   <div class="workspace">
     <section class="map-panel">
       <div class="map-toolbar">
@@ -237,8 +244,15 @@ function formatTimestamp(timestamp: string | null) {
         </p>
         <label class="toggle-row sound-alert-toggle">
           <span>
-            <strong>Sound alerts</strong>
-            <small>Play a sound when rain triggers an alert</small>
+            <strong>Rain alerts</strong>
+            <small>Notify, and sound until acknowledged, when rain triggers an area</small>
+          </span>
+          <input v-model="state.alertTypes.rain" type="checkbox" aria-label="Rain alerts" />
+        </label>
+        <label class="toggle-row">
+          <span>
+            <strong>Alert sounds</strong>
+            <small>Play tones for alerts that are on</small>
           </span>
           <input v-model="state.soundAlerts" type="checkbox" aria-label="Sound alerts" />
         </label>
@@ -255,18 +269,11 @@ function formatTimestamp(timestamp: string | null) {
             max="100"
             step="5"
             aria-label="Alert volume"
-            @input="notifications.previewAlertSound"
+            @input="notifications.previewTone('rain')"
           />
-          <small>Adjust to preview the alert sound.</small>
+          <small>Adjust to preview the rain alert tone.</small>
         </div>
-        <button
-          v-if="notifications.alertPlaying.value"
-          class="stop-alert-button"
-          type="button"
-          @click="notifications.stopAlertSound"
-        >
-          Stop alert
-        </button>
+        <p class="page-alert-note">Alerts only notify and sound while Watch is open.</p>
         <button
           class="check-button"
           type="button"

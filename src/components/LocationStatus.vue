@@ -20,7 +20,7 @@ const props = defineProps<{
   now: number
   settings: LiveSettings
 }>()
-const emit = defineEmits<{ setup: []; select: [id: string] }>()
+const emit = defineEmits<{ setup: []; add: []; select: [id: string] }>()
 
 const cards = computed(() =>
   props.locations
@@ -72,6 +72,7 @@ function progress(remaining: number) {
         <p class="eyebrow">Live status</p>
         <h2>Your locations</h2>
       </div>
+      <button class="add-button" type="button" @click="emit('add')">+ Add location</button>
     </header>
 
     <label class="toggle-row countdown-toggle">
