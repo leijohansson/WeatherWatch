@@ -1,6 +1,6 @@
 import { computed, ref, type Ref } from 'vue'
 import alertSoundUrl from '../../assets/alert.wav'
-import { INTENSITY_LABELS } from '@/lib/palette'
+import { lightningDetail, liveHref, rainDetail } from '@/lib/alertText'
 import type { AlertEvent } from '@/types'
 
 export function useNotifications(soundAlerts?: Ref<boolean>, soundVolume?: Ref<number>) {
@@ -20,10 +20,17 @@ export function useNotifications(soundAlerts?: Ref<boolean>, soundVolume?: Ref<n
     return 'Enable desktop notifications'
   })
 
-  function show(title: string, options: NotificationOptions) {
+  function show(title: string, options: NotificationOptions, href?: string) {
     if (!supported || permission.value !== 'granted') return false
     try {
-      new Notification(title, options)
+      const notification = new Notification(title, options)
+      if (href) {
+        notification.onclick = () => {
+          window.focus()
+          window.location.hash = href
+          notification.close?.()
+        }
+      }
       return true
     } catch {
       return false
@@ -117,21 +124,31 @@ export function useNotifications(soundAlerts?: Ref<boolean>, soundVolume?: Ref<n
 
   function send(event: AlertEvent) {
     const prefix = event.source === 'test' ? 'Test · ' : ''
-    const reason = {
-      entry: 'Rain entered your area',
-      escalation: 'Rain intensity increased',
-      'new-cell': 'A new rain cell appeared',
-    }[event.reason]
-    const threshold = event.thresholdIntensity ?? event.intensity
-    const intensityDetail =
-      threshold === event.intensity
-        ? `${INTENSITY_LABELS[threshold]} threshold met`
-        : `${INTENSITY_LABELS[threshold]} threshold met · peak ${INTENSITY_LABELS[event.intensity]}`
-    show(`${prefix}${event.areaName}`, {
-      body: `${reason} · ${intensityDetail} · ${event.pixelCount} qualifying pixels`,
-      tag: `${event.source}-${event.areaId}-${event.reason}`,
-    })
+    const tag = `${event.source}-${event.areaId}-${event.reason}`
+    if (event.reason === 'lightning') {
+      show(
+        `${prefix}${event.areaName}`,
+        { body: `Lightning nearby · ${lightningDetail(event)}`, tag },
+        event.openLive ? liveHref(event.areaId) : undefined,
+      )
+    } else {
+      const reason = {
+        entry: 'Rain entered your area',
+        escalation: 'Rain intensity increased',
+        'new-cell': 'A new rain cell appeared',
+      }[event.reason]
+      show(`${prefix}${event.areaName}`, {
+        body: `${reason} · ${rainDetail(event, 'threshold met')} · ${event.pixelCount} qualifying pixels`,
+        tag,
+      })
+    }
     playAlertSound()
+  }
+
+  /** Live mode location alerts: strike in ring and all-clear. */
+  function sendLive(title: string, body: string, tag: string, href: string, sound: boolean) {
+    show(title, { body, tag }, href)
+    if (sound) playAlertSound()
   }
 
   function sendRadarFailure(message: string) {
@@ -149,6 +166,7 @@ export function useNotifications(soundAlerts?: Ref<boolean>, soundVolume?: Ref<n
     alertPlaying,
     requestPermission,
     send,
+    sendLive,
     sendRadarFailure,
     previewAlertSound,
     stopAlertSound,

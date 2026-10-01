@@ -5,7 +5,7 @@ import AreaEditor from '@/components/AreaEditor.vue'
 import RadarMap from '@/components/RadarMap.vue'
 import StatusPill from '@/components/StatusPill.vue'
 import { useNotifications } from '@/composables/useNotifications'
-import { usePersistence } from '@/composables/usePersistence'
+import { AREA_LIGHTNING_DEFAULTS, usePersistence } from '@/composables/usePersistence'
 import { useRadarMonitor } from '@/composables/useRadarMonitor'
 import { INTENSITY_LABELS } from '@/lib/palette'
 import type { AlertArea, AlertEvent, Point } from '@/types'
@@ -59,6 +59,7 @@ function finishDrawing() {
     intensityThreshold: 'moderate',
     pixelThreshold: 20,
     notifyNewCell: true,
+    ...AREA_LIGHTNING_DEFAULTS,
   }
   state.areas.push(area)
   monitor.reanalyzeArea(area.id)

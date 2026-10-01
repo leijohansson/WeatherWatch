@@ -1,31 +1,19 @@
 <script setup lang="ts">
-import { INTENSITY_LABELS } from '@/lib/palette'
+import { lightningDetail, liveHref, parseCompactTimestamp, rainDetail, REASON_LABELS } from '@/lib/alertText'
 import type { AlertEvent } from '@/types'
 
 defineProps<{ events: AlertEvent[] }>()
 defineEmits<{ clear: [] }>()
 
-function reason(event: AlertEvent) {
-  return {
-    entry: 'Rain entered',
-    escalation: 'Intensity increased',
-    'new-cell': 'New rain cell',
-  }[event.reason]
-}
-
-function intensity(event: AlertEvent) {
-  const threshold = event.thresholdIntensity ?? event.intensity
-  return threshold === event.intensity
-    ? `${INTENSITY_LABELS[threshold]} threshold`
-    : `${INTENSITY_LABELS[threshold]} threshold · peak ${INTENSITY_LABELS[event.intensity]}`
+function detail(event: AlertEvent) {
+  return event.reason === 'lightning'
+    ? lightningDetail(event)
+    : `${rainDetail(event)} · ${event.pixelCount} px`
 }
 
 function formatTime(timestamp: string) {
-  const compact = timestamp.replace(/\D/g, '')
-  if (compact.length < 12) return timestamp
-  const date = new Date(
-    `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}T${compact.slice(8, 10)}:${compact.slice(10, 12)}:00+08:00`,
-  )
+  const date = parseCompactTimestamp(timestamp)
+  if (!date) return timestamp
   return new Intl.DateTimeFormat('en-SG', {
     timeZone: 'Asia/Singapore',
     day: 'numeric',
@@ -56,8 +44,11 @@ function formatTime(timestamp: string) {
       <li v-for="event in events" :key="event.id">
         <span class="event-icon" :class="event.reason">●</span>
         <div>
-          <strong>{{ event.source === 'test' ? 'Test · ' : '' }}{{ reason(event) }}</strong>
-          <p>{{ event.areaName }} · {{ intensity(event) }} · {{ event.pixelCount }} px</p>
+          <strong>{{ event.source === 'test' ? 'Test · ' : '' }}{{ REASON_LABELS[event.reason] }}</strong>
+          <p>{{ event.areaName }} · {{ detail(event) }}</p>
+          <a v-if="event.reason === 'lightning'" class="event-link" :href="liveHref(event.areaId)">
+            Open in Live →
+          </a>
         </div>
         <time>{{ formatTime(event.timestamp) }}</time>
       </li>

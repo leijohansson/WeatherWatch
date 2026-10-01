@@ -2,10 +2,11 @@ import { INTENSITY_RANK } from './palette'
 import { isNewCluster } from './detection'
 import type {
   AlertArea,
-  AlertEvent,
   AreaAlertState,
   AreaReading,
   RadarFrame,
+  RainAlertEvent,
+  RainAlertReason,
 } from '@/types'
 
 export function evaluateTransition(
@@ -13,17 +14,17 @@ export function evaluateTransition(
   reading: AreaReading,
   previous: AreaAlertState | undefined,
   frame: Pick<RadarFrame, 'timestamp' | 'source' | 'width'>,
-): { next: AreaAlertState; events: AlertEvent[] } {
+): { next: AreaAlertState; events: RainAlertEvent[] } {
   const prior = previous ?? { rainy: false, maximumIntensity: null, clusterPixels: [] }
   const next: AreaAlertState = {
     rainy: reading.rainy,
     maximumIntensity: reading.maximumIntensity,
     clusterPixels: reading.clusters.map((cluster) => cluster.pixels),
   }
-  const events: AlertEvent[] = []
+  const events: RainAlertEvent[] = []
   if (!reading.rainy || !reading.maximumIntensity) return { next, events }
 
-  const add = (reason: AlertEvent['reason'], pixelCount = reading.qualifyingPixels) => {
+  const add = (reason: RainAlertReason, pixelCount = reading.qualifyingPixels) => {
     events.push({
       id: `${area.id}-${frame.timestamp}-${reason}`,
       areaId: area.id,
