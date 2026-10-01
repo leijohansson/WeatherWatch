@@ -6,7 +6,8 @@
     python3 scripts/build_geo.py army MFOSectors.txt
 
 Output goes to public/geo/. Geometry is clipped to the area the Live map can show, simplified,
-and written as WGS84 [lon, lat] with 5 decimals (about 1 m).
+and written as WGS84 [lon, lat] with 5 decimals (about 1 m). `coast` also writes
+coast-region.geojson, covering the whole 240 km radar image for the Watch map.
 """
 
 import argparse
@@ -20,6 +21,8 @@ OUT_DIR = Path(__file__).resolve().parent.parent / "public" / "geo"
 
 # The Live map can't pan past this box (lon/lat). Clip a little wider so clip edges stay off-screen.
 CLIP = (103.0, 104.7, 0.6, 2.1)
+# The Watch map shows the radar image's extent (src/lib/geo.ts RADAR_BOUNDS), padded the same way.
+REGION_CLIP = (101.812 - 0.3, 106.127 + 0.3, -0.805 - 0.3, 3.507 + 0.3)
 LAT0, LON0 = 1.35, 103.82
 KX, KY = math.cos(math.radians(LAT0)) * 111.32, 110.57
 
@@ -149,18 +152,29 @@ def feature(polygons, **properties):
     return {"type": "Feature", "properties": properties, "geometry": {"type": "MultiPolygon", "coordinates": polygons}}
 
 
-def build_coast(path, kind, tolerance_km):
+def coast_polygons(shapes, box, tolerance_km):
     polygons = []
-    for parts, _ in read_shp(path, CLIP):
+    for parts, bbox in shapes:
+        if not box_overlaps(bbox, box):
+            continue
         for ring in parts:
-            clipped = clip_ring(ring)
+            clipped = clip_ring(ring, box)
             if len(clipped) < 3:
                 continue
             simplified = simplify(clipped, tolerance_km)
             if len(simplified) >= 3:
                 polygons.append([ring_out(simplified)])
+    return polygons
+
+
+def build_coast(path, kind, tolerance_km):
+    shapes = read_shp(path, REGION_CLIP)
+    source = Path(path).name
     # Shapefile holes are separate rings; rendering with fill-rule evenodd keeps them as holes.
-    write("coast.geojson", [feature(polygons, kind=kind, source=Path(path).name)])
+    write("coast.geojson", [feature(coast_polygons(shapes, CLIP, tolerance_km), kind=kind, source=source)])
+    # The Watch map is wider and zooms less far, so it can be simplified more.
+    region = coast_polygons(shapes, REGION_CLIP, max(tolerance_km, 0.1))
+    write("coast-region.geojson", [feature(region, kind=kind, source=source)])
 
 
 def title(name):

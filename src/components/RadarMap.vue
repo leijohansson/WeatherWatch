@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
-import baseMapUrl from '../../assets/map_240km_v2.jpg'
+import { useGeoLayers } from '@/composables/useGeoLayers'
 import {
   clampView,
   clientToNormalized,
@@ -10,6 +10,7 @@ import {
   zoomView,
   type MapView,
 } from '@/lib/geometry'
+import { featurePolygons, pathRadarImage } from '@/lib/mapGeometry'
 import type { AlertArea, Point } from '@/types'
 
 const props = defineProps<{
@@ -29,6 +30,15 @@ const emit = defineEmits<{
   'move-vertex': [areaId: string, index: number, point: Point]
   'move-vertex-end': [areaId: string]
 }>()
+
+// The base map is Live's vector coastline over the whole radar image, so it stays sharp when zoomed.
+const SEA = '#d9dedd'
+const LAND = '#fbfbf9'
+const { coastRegion } = useGeoLayers()
+const coastKind = computed(() => coastRegion.value?.features[0]?.properties.kind ?? 'land')
+const coastPath = computed(() =>
+  (coastRegion.value?.features ?? []).map((feature) => pathRadarImage(featurePolygons(feature))).join(''),
+)
 
 const map = ref<HTMLElement>()
 const dragging = ref<{ areaId: string; index: number } | null>(null)
@@ -167,6 +177,7 @@ const draftPoints = computed(() => pointsAttribute(props.draft))
     class="radar-map"
     :class="{ drawing, zoomed: view.scale > 1 }"
     data-testid="radar-map"
+    :style="{ background: coastKind === 'land' ? SEA : LAND }"
     @click="onMapClick"
     @pointerdown="startPan"
     @wheel="onWheel"
@@ -174,8 +185,22 @@ const draftPoints = computed(() => pointsAttribute(props.draft))
     @pointerup="endDrag"
     @pointercancel="endDrag"
   >
+    <svg
+      class="coast-layer"
+      :viewBox="viewBox"
+      preserveAspectRatio="none"
+      role="img"
+      aria-label="Coastline of Singapore and the surrounding region"
+    >
+      <path
+        v-if="coastPath"
+        :d="coastPath"
+        :fill="coastKind === 'land' ? LAND : SEA"
+        class="coast"
+        fill-rule="evenodd"
+      />
+    </svg>
     <div class="radar-map-images" :style="{ transform: imageTransform }">
-      <img :src="baseMapUrl" alt="Regional map centred on Singapore" class="base-map" />
       <img
         v-if="overlayUrl"
         :src="overlayUrl"

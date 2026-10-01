@@ -12,8 +12,9 @@ uv run fastapi dev
 
 ## Map layers
 
-Live mode's coastline and sectors are GeoJSON in `public/geo/`, built with `scripts/build_geo.py`
-(standard library only):
+The coastline (both maps) and Live's sectors are GeoJSON in `public/geo/`, built with
+`scripts/build_geo.py` (standard library only). `coast` writes `coast.geojson` for Live and
+`coast-region.geojson`, covering the whole radar image, for Watch:
 
 ```bash
 python3 scripts/build_geo.py coast --land ne_10m_land.shp   # current placeholder

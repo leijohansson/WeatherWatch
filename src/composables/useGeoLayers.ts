@@ -12,6 +12,8 @@ export interface SectorProperties {
 }
 
 const coast = shallowRef<GeoCollection<CoastProperties> | null>(null)
+/** The same coastline over the whole radar image, for the Watch map. */
+const coastRegion = shallowRef<GeoCollection<CoastProperties> | null>(null)
 const townships = shallowRef<GeoCollection<SectorProperties> | null>(null)
 const army = shallowRef<GeoCollection<SectorProperties> | null>(null)
 let loading: Promise<void> | null = null
@@ -31,10 +33,12 @@ export function useGeoLayers() {
     load<GeoCollection<CoastProperties>>(`${import.meta.env.BASE_URL}geo/coast.geojson`),
     load<GeoCollection<SectorProperties>>(`${import.meta.env.BASE_URL}geo/townships.geojson`),
     load<GeoCollection<SectorProperties>>(`${import.meta.env.BASE_URL}geo/army-cat1.geojson`),
-  ]).then(([c, t, a]) => {
+    load<GeoCollection<CoastProperties>>(`${import.meta.env.BASE_URL}geo/coast-region.geojson`),
+  ]).then(([c, t, a, r]) => {
     coast.value = c
     townships.value = t
     army.value = a
+    coastRegion.value = r
   })
-  return { coast, townships, army, loaded: loading }
+  return { coast, coastRegion, townships, army, loaded: loading }
 }

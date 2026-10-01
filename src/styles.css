@@ -374,7 +374,6 @@ input[type='range'] {
 }
 
 .radar-map-images,
-.base-map,
 .radar-overlay,
 .radar-map > svg {
   position: absolute;
@@ -384,7 +383,6 @@ input[type='range'] {
   height: 100%;
 }
 
-.base-map,
 .radar-overlay {
   object-fit: cover;
 }
@@ -397,6 +395,11 @@ input[type='range'] {
 .radar-map > svg {
   z-index: 2;
   overflow: visible;
+}
+
+.radar-map > svg.coast-layer {
+  z-index: 0;
+  pointer-events: none;
 }
 
 .radar-map polygon {

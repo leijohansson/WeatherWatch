@@ -1,4 +1,4 @@
-import { project } from './geo'
+import { latLonToNormalized, project } from './geo'
 import { pointInPolygon } from './geometry'
 import type { LatLon, Point } from '@/types'
 
@@ -29,6 +29,21 @@ export function pathKm(polygons: MultiPolygon): string {
       ring.forEach(([lon, lat], index) => {
         const { x, y } = project(lat, lon)
         d += `${index ? 'L' : 'M'}${x.toFixed(3)} ${y.toFixed(3)}`
+      })
+      d += 'Z'
+    }
+  }
+  return d
+}
+
+/** SVG path data in the Watch map's 0–100 radar-image units; use with fill-rule evenodd. */
+export function pathRadarImage(polygons: MultiPolygon): string {
+  let d = ''
+  for (const polygon of polygons) {
+    for (const ring of polygon) {
+      ring.forEach(([lon, lat], index) => {
+        const { x, y } = latLonToNormalized({ lat, lon })
+        d += `${index ? 'L' : 'M'}${(x * 100).toFixed(3)} ${(y * 100).toFixed(3)}`
       })
       d += 'Z'
     }
