@@ -41,7 +41,6 @@ export function newLiveLocation(overrides: Partial<LiveLocation> = {}): LiveLoca
     countCloudToCloud: true,
     showCountdown: true,
     notifyStrike: true,
-    notifyAllClear: true,
     ...overrides,
   }
 }
@@ -124,6 +123,13 @@ function rainOnlyArea(area: AlertArea): AlertArea {
   return copy as unknown as AlertArea
 }
 
+// Locations saved before the all-clear notification was removed still carry its setting.
+function withoutAllClearNotify(location: LiveLocation): LiveLocation {
+  const copy: Record<string, unknown> = { ...newLiveLocation(location) }
+  delete copy.notifyAllClear
+  return copy as unknown as LiveLocation
+}
+
 function mergeLiveSettings(saved: Partial<LiveSettings> | undefined): LiveSettings {
   const base = defaultLiveSettings()
   const minLevel = saved?.forecast?.radar?.minLevel
@@ -164,7 +170,7 @@ export function readPersistedState(storage: Pick<Storage, 'getItem'> = localStor
       soundVolume: parsed.settings?.soundVolume ?? 70,
       alertTypes: { ...defaultAlertTypes(), ...parsed.settings?.alertTypes },
       liveLocations: Array.isArray(parsed.liveLocations)
-        ? parsed.liveLocations.map((location) => newLiveLocation(location))
+        ? parsed.liveLocations.map(withoutAllClearNotify)
         : [],
       live: mergeLiveSettings(parsed.live),
     }

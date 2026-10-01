@@ -53,11 +53,10 @@ const counts = computed(() => strikeCounts(props.strikes, props.now))
 
 const setupSummary = computed(() => {
   const n = props.locations.length
-  const alerts = []
-  if (props.locations.some((l) => l.notifyStrike)) alerts.push('strikes in ring')
-  if (props.locations.some((l) => l.notifyAllClear)) alerts.push('all-clear')
   const noun = `${n} ${n === 1 ? 'location' : 'locations'}`
-  return alerts.length ? `${noun} · alerts for ${alerts.join(', ')}` : `${noun} · no alerts`
+  return props.locations.some((l) => l.notifyStrike)
+    ? `${noun} · alerts for strikes in ring`
+    : `${noun} · no alerts`
 })
 
 function progress(remaining: number) {

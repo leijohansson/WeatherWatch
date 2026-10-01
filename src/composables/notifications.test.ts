@@ -139,7 +139,7 @@ describe('notifications', () => {
     const audio = stubAudio()
     const notifications = useNotifications(ref(true))
 
-    notifications.sendLive('Home', 'Ground strike 2 km away', 'tag', '#/live', true)
+    notifications.sendLive('Home', 'Ground strike 2 km away', 'tag', '#/live')
     notifications.sendDiscrepancy('Discrepancy · Bedok', 'Radar shows a storm', 'tag', '#/live')
     await Promise.resolve()
     expect(audio.map((a) => [a.src.includes('lightning') ? 'lightning' : 'discrepancy', a.loop])).toEqual([

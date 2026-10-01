@@ -11,10 +11,10 @@ interface LiveAlertOptions {
   testMode: Ref<boolean>
   /** Set once the feed has delivered its first batch, so existing storms don't notify on page load. */
   ready: Ref<boolean>
-  notify: (title: string, body: string, tag: string, href: string, sound: boolean) => void
+  notify: (title: string, body: string, tag: string, href: string) => void
 }
 
-/** Ring state per Live location, with notifications on strike-in-ring and all-clear transitions. */
+/** Ring state per Live location, with a notification when a strike lands inside a ring. */
 export function useLiveAlerts(options: LiveAlertOptions) {
   const ringStates = computed<Record<string, RingState>>(() => {
     const states: Record<string, RingState> = {}
@@ -38,22 +38,12 @@ export function useLiveAlerts(options: LiveAlertOptions) {
       const before = previous[location.id]
       const after = next[location.id]
       if (!before || before === after) continue
-      const href = liveHref(location.id)
-      if (after === 'active' && location.notifyStrike) {
-        const latest = latestStrikeInRing(location, options.strikes.value)
-        const detail = latest
-          ? `${STRIKE_TYPE_LABELS[latest.strike.type]} strike ${formatKm(latest.distanceKm)} away, inside the ${location.radiusKm} km ring`
-          : `Strike inside the ${location.radiusKm} km ring`
-        options.notify(`${prefix}${location.name}`, detail, `live-${location.id}-strike`, href, true)
-      } else if (after === 'clear' && location.notifyAllClear) {
-        options.notify(
-          `${prefix}${location.name} · all clear`,
-          `No strikes inside the ${location.radiusKm} km ring for ${options.settings.value.allClearMinutes} min`,
-          `live-${location.id}-clear`,
-          href,
-          false,
-        )
-      }
+      if (after !== 'active' || !location.notifyStrike) continue
+      const latest = latestStrikeInRing(location, options.strikes.value)
+      const detail = latest
+        ? `${STRIKE_TYPE_LABELS[latest.strike.type]} strike ${formatKm(latest.distanceKm)} away, inside the ${location.radiusKm} km ring`
+        : `Strike inside the ${location.radiusKm} km ring`
+      options.notify(`${prefix}${location.name}`, detail, `live-${location.id}-strike`, liveHref(location.id))
     }
   })
 

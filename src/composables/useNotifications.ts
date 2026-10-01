@@ -161,10 +161,10 @@ export function useNotifications(soundAlerts?: Ref<boolean>, soundVolume?: Ref<n
     playTone('rain', { title, body })
   }
 
-  /** Live mode location alerts: strike in ring (with the lightning tone) and all-clear (silent). */
-  function sendLive(title: string, body: string, tag: string, href: string, sound: boolean) {
+  /** A strike inside a Live location's ring, with the lightning tone. */
+  function sendLive(title: string, body: string, tag: string, href: string) {
     show(title, { body, tag }, href)
-    if (sound) playTone('lightning', { title, body })
+    playTone('lightning', { title, body })
   }
 
   /** A sector has become Discrepancy; its tone repeats until acknowledged. */

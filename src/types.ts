@@ -77,7 +77,6 @@ export interface LiveLocation {
   countCloudToCloud: boolean
   showCountdown: boolean
   notifyStrike: boolean
-  notifyAllClear: boolean
 }
 
 export type SectorSet = 'town' | 'army' | 'off'

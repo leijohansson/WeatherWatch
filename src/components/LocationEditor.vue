@@ -74,13 +74,6 @@ const valid = computed(
       </span>
       <input v-model="draft.notifyStrike" type="checkbox" aria-label="Notify on strike in ring" />
     </label>
-    <label class="toggle-row">
-      <span>
-        <strong>Notify: all-clear</strong>
-        <small>When the countdown runs out</small>
-      </span>
-      <input v-model="draft.notifyAllClear" type="checkbox" aria-label="Notify on all-clear" />
-    </label>
 
     <div class="button-row">
       <button class="secondary-button" type="button" @click="emit('cancel')">Cancel</button>

@@ -19,7 +19,6 @@ const home: LiveLocation = {
   countCloudToCloud: true,
   showCountdown: true,
   notifyStrike: true,
-  notifyAllClear: true,
 }
 
 const strikeNear = (ageMin: number, type: Strike['type'] = 'cg'): Strike => ({
@@ -96,7 +95,7 @@ describe('location status', () => {
     const wrapper = mountStatus([], 'clear')
     expect(wrapper.text()).toContain('CLEAR')
     expect(wrapper.text()).toContain('No strikes in the last 30 min')
-    expect(wrapper.text()).toContain('1 location · alerts for strikes in ring, all-clear')
+    expect(wrapper.text()).toContain('1 location · alerts for strikes in ring')
   })
 })
 

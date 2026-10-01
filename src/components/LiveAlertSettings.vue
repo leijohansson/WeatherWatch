@@ -15,7 +15,7 @@ defineProps<{
     <label class="toggle-row">
       <span>
         <strong>Lightning alerts</strong>
-        <small>Strike inside a ring (plays once), and all-clear, per each location's setup</small>
+        <small>Strike inside a ring (plays once), per each location's setup</small>
       </span>
       <input v-model="state.alertTypes.lightning" type="checkbox" aria-label="Lightning alerts" />
     </label>

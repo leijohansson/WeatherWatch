@@ -26,7 +26,6 @@ const home: LiveLocation = {
   countCloudToCloud: true,
   showCountdown: true,
   notifyStrike: true,
-  notifyAllClear: true,
 }
 
 /** A strike `km` due north of home, `ageMin` minutes before NOW. */

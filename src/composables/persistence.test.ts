@@ -81,6 +81,14 @@ describe('persistence', () => {
       expect(state.live.forecast.lightning.distanceKm).toBe(15)
     })
 
+    it('drops the removed all-clear notification from saved locations', () => {
+      const saved = { ...migrateV1(v1) }
+      saved.liveLocations = [{ ...saved.liveLocations[0]!, notifyAllClear: true } as never]
+      const state = readPersistedState({ getItem: () => JSON.stringify(saved) })
+      expect(state.liveLocations[0]).not.toHaveProperty('notifyAllClear')
+      expect(state.liveLocations[0]?.notifyStrike).toBe(true)
+    })
+
     it('drops Watch lightning from early v2 data', () => {
       const early = {
         ...migrateV1(v1),
