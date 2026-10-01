@@ -1,0 +1,12 @@
+node_modules
+.pnpm-store
+.vite
+dist
+.venv
+__pycache__
+.pytest_cache
+.git
+.gitignore
+.vscode
+.DS_Store
+*.log

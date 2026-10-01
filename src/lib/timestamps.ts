@@ -14,18 +14,18 @@ export function radarTimestamp(date: Date): string {
 }
 
 export function recentRadarTimestamps(now = new Date(), count = 5): string[] {
-  const interval = 15 * 60 * 1000
+  const interval = 5 * 60 * 1000
   const boundary = Math.floor(now.getTime() / interval) * interval
   return Array.from({ length: count }, (_, index) =>
     radarTimestamp(new Date(boundary - index * interval)),
   )
 }
 
-export function millisecondsUntilNextBoundary(now = new Date(), delayMs = 60_000) {
-  const interval = 15 * 60 * 1000
-  return interval - (now.getTime() % interval) + delayMs
+export function millisecondsUntilNextBoundary(now = new Date()) {
+  const interval = 3 * 60 * 1000
+  return interval - (now.getTime() % interval)
 }
 
 export function radarUrl(timestamp: string) {
-  return `/weather-radar/dpsri_240km_${timestamp}dBR.dpsri.png`
+  return `/api/weather-radar/img/dpsri_240km_${timestamp}dBR.dpsri.png`
 }

@@ -75,6 +75,29 @@ describe('radar monitor area edits', () => {
     wrapper.unmount()
   })
 
+  it('uses the legacy radar source when the data.gov.sg API is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new Error('API unavailable'))))
+    const monitoring = ref(false)
+    let monitor!: ReturnType<typeof useRadarMonitor>
+    const wrapper = mountMonitor(() => {
+      monitor = useRadarMonitor({
+        areas: ref([]),
+        monitoring,
+        liveState: reactive({}),
+        addEvents: () => undefined,
+        notifyFailure: () => undefined,
+      })
+    })
+
+    monitoring.value = true
+    await flushPromises()
+
+    expect(monitor.status.value).toBe('monitoring')
+    expect(monitor.latestTimestamp.value).not.toBeNull()
+    expect(monitor.radarSourceLabel.value).toBe('Source · weather.gov.sg fallback')
+    wrapper.unmount()
+  })
+
   it('notifies once when all radar fallbacks fail in the same period', async () => {
     class FailingImage {
       crossOrigin: string | null = null
@@ -85,6 +108,24 @@ describe('radar monitor area edits', () => {
       }
     }
     vi.stubGlobal('Image', FailingImage)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            data: {
+              records: [
+                {
+                  timestamp: '2026-07-26T15:30:00+08:00',
+                  image: { url: 'https://images.example/latest.png' },
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+      ),
+    )
     const monitoring = ref(false)
     const notifyFailure = vi.fn()
     let monitor!: ReturnType<typeof useRadarMonitor>

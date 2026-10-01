@@ -64,6 +64,8 @@ export interface PersistedState {
   settings: {
     monitoring: boolean
     overlayOpacity: number
+    soundAlerts: boolean
+    soundVolume: number
   }
 }
 

@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import { INTENSITIES, type AlertArea, type AreaReading } from '@/types'
-import { INTENSITY_LABELS } from '@/lib/palette'
+import { computed } from 'vue'
+import { INTENSITIES, type AlertArea, type AreaReading, type Intensity } from '@/types'
+import { INTENSITY_LABELS, INTENSITY_RANK } from '@/lib/palette'
 
-defineProps<{ area: AlertArea; reading: AreaReading | undefined }>()
+const props = defineProps<{ area: AlertArea; reading: AreaReading | undefined }>()
 const emit = defineEmits<{ delete: []; change: [] }>()
+
+const intensityValue = computed({
+  get: () => INTENSITY_RANK[props.area.intensityThreshold],
+  set: (value: number) => {
+    props.area.intensityThreshold = INTENSITIES[value - 1] as Intensity
+  },
+})
 </script>
 
 <template>
@@ -21,11 +29,26 @@ const emit = defineEmits<{ delete: []; change: [] }>()
 
     <div class="field">
       <label for="intensity">Alert from</label>
-      <select id="intensity" v-model="area.intensityThreshold" @change="emit('change')">
-        <option v-for="intensity in INTENSITIES" :key="intensity" :value="intensity">
-          {{ INTENSITY_LABELS[intensity] }} rain
-        </option>
-      </select>
+      <div class="intensity-scale">
+        <output for="intensity">{{ INTENSITY_LABELS[area.intensityThreshold] }} rain</output>
+        <input
+          id="intensity"
+          v-model.number="intensityValue"
+          class="intensity-slider"
+          type="range"
+          min="1"
+          max="4"
+          step="1"
+          aria-label="Minimum rain intensity"
+          :aria-valuetext="`${INTENSITY_LABELS[area.intensityThreshold]} rain`"
+          @change="emit('change')"
+        />
+        <div class="intensity-labels" aria-hidden="true">
+          <span v-for="intensity in INTENSITIES" :key="intensity">
+            {{ INTENSITY_LABELS[intensity] }}
+          </span>
+        </div>
+      </div>
     </div>
 
     <div class="field">

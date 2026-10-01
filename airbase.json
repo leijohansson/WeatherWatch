@@ -1,0 +1,6 @@
+{
+  "framework": "container",
+  "handle": "weather/weather-watch",
+  "port": 8080,
+  "instanceType": "nano"
+}

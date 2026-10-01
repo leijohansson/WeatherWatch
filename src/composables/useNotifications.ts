@@ -1,13 +1,17 @@
-import { computed, ref } from 'vue'
+import { computed, ref, type Ref } from 'vue'
+import alertSoundUrl from '../../assets/alert.wav'
 import { INTENSITY_LABELS } from '@/lib/palette'
 import type { AlertEvent } from '@/types'
 
-export function useNotifications() {
+export function useNotifications(soundAlerts?: Ref<boolean>, soundVolume?: Ref<number>) {
   const supported = typeof window !== 'undefined' && 'Notification' in window
   const permission = ref<NotificationPermission>(
     supported ? Notification.permission : 'denied',
   )
   const feedback = ref<string | null>(null)
+  const alertPlaying = ref(false)
+  let alertAudio: HTMLAudioElement | null = null
+  let audioRequest = 0
 
   const permissionLabel = computed(() => {
     if (!supported) return 'Not supported'
@@ -24,6 +28,50 @@ export function useNotifications() {
     } catch {
       return false
     }
+  }
+
+  function getAlertAudio() {
+    if (typeof Audio === 'undefined') return null
+    if (alertAudio) return alertAudio
+    alertAudio = new Audio(alertSoundUrl)
+    alertAudio.addEventListener('ended', () => {
+      alertPlaying.value = false
+    })
+    return alertAudio
+  }
+
+  function setAlertVolume(audio: HTMLAudioElement) {
+    audio.volume = Math.max(0, Math.min(100, soundVolume?.value ?? 70)) / 100
+  }
+
+  function startAudio(loop: boolean) {
+    const audio = getAlertAudio()
+    if (!audio) return
+    const request = ++audioRequest
+    audio.loop = loop
+    setAlertVolume(audio)
+    audio.currentTime = 0
+    void audio.play().then(() => {
+      if (request === audioRequest) alertPlaying.value = true
+    }).catch(() => {
+      if (request === audioRequest) alertPlaying.value = false
+    })
+  }
+
+  function playAlertSound() {
+    if (soundAlerts?.value) startAudio(true)
+  }
+
+  function previewAlertSound() {
+    startAudio(false)
+  }
+
+  function stopAlertSound() {
+    if (!alertAudio) return
+    audioRequest += 1
+    alertAudio.pause()
+    alertAudio.currentTime = 0
+    alertPlaying.value = false
   }
 
   async function requestPermission() {
@@ -83,6 +131,7 @@ export function useNotifications() {
       body: `${reason} · ${intensityDetail} · ${event.pixelCount} qualifying pixels`,
       tag: `${event.source}-${event.areaId}-${event.reason}`,
     })
+    playAlertSound()
   }
 
   function sendRadarFailure(message: string) {
@@ -97,8 +146,11 @@ export function useNotifications() {
     permission,
     permissionLabel,
     feedback,
+    alertPlaying,
     requestPermission,
     send,
     sendRadarFailure,
+    previewAlertSound,
+    stopAlertSound,
   }
 }

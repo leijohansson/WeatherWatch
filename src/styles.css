@@ -234,10 +234,16 @@ h1 em {
   margin-bottom: 14px;
 }
 
-.map-toolbar > div {
+.radar-details,
+.radar-time {
   display: flex;
   align-items: baseline;
   gap: 12px;
+}
+
+.radar-details {
+  flex-wrap: wrap;
+  row-gap: 4px;
 }
 
 .toolbar-label {
@@ -251,6 +257,21 @@ h1 em {
   color: #a8bcbb;
   font-size: 11px;
   font-weight: 500;
+}
+
+.radar-source,
+.stale-radar-warning {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.radar-source {
+  color: #607d7f;
+}
+
+.stale-radar-warning {
+  color: var(--orange);
 }
 
 .map-toolbar label {
@@ -506,6 +527,75 @@ h3 {
   font-size: 8px;
 }
 
+.areas-summary {
+  padding-top: 15px;
+  border-top: 1px solid var(--line);
+}
+
+.areas-summary .eyebrow {
+  margin-bottom: 5px;
+}
+
+.areas-summary h3 {
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.area-summary-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.area-summary-row:hover strong {
+  color: var(--mint);
+}
+
+.area-summary-row > i {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.area-summary-row > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.area-summary-row strong,
+.area-summary-row small {
+  display: block;
+}
+
+.area-summary-row strong {
+  overflow: hidden;
+  color: #b5c6c5;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.area-summary-row small {
+  margin-top: 2px;
+  color: #617b7c;
+  font-size: 9px;
+}
+
+.area-summary-row em {
+  color: var(--orange);
+  font-size: 8px;
+  font-style: normal;
+}
+
 .area-editor {
   padding-top: 15px;
   border-top: 1px solid var(--line);
@@ -536,6 +626,73 @@ h3 {
 
 .field input[type='range'] {
   width: 100%;
+}
+
+.intensity-scale {
+  padding: 9px 10px 7px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: #0a2024;
+}
+
+.intensity-scale output {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--cream);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.intensity-slider {
+  display: block;
+  width: 100%;
+  height: 17px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.intensity-slider::-webkit-slider-runnable-track {
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #00d8d8 0%, #00d845 31%, #f6ec00 53%, #ff6a00 74%, #d30060 100%);
+}
+
+.intensity-slider::-moz-range-track {
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #00d8d8 0%, #00d845 31%, #f6ec00 53%, #ff6a00 74%, #d30060 100%);
+}
+
+.intensity-slider::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  margin-top: -4.5px;
+  border: 2px solid #f7fcfb;
+  border-radius: 50%;
+  appearance: none;
+  -webkit-appearance: none;
+  background: #0a2024;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
+}
+
+.intensity-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #f7fcfb;
+  border-radius: 50%;
+  background: #0a2024;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
+}
+
+.intensity-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  color: #718a8b;
+  font-size: 8px;
 }
 
 .field p {
@@ -699,6 +856,51 @@ button:disabled {
 
 .monitor-heading div {
   flex: 1;
+}
+
+.sound-alert-toggle {
+  margin-top: 12px;
+}
+
+.sound-volume-control {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.sound-volume-control label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 7px;
+  color: #a2b6b5;
+  font-size: 11px;
+}
+
+.sound-volume-control output {
+  color: var(--mint);
+}
+
+.sound-volume-control input {
+  width: 100%;
+}
+
+.sound-volume-control small {
+  display: block;
+  margin-top: 3px;
+  color: #607a7c;
+  font-size: 9px;
+}
+
+.stop-alert-button {
+  width: 100%;
+  min-height: 36px;
+  margin-top: 0;
+  border: 1px solid rgba(231, 136, 136, 0.5);
+  border-radius: 2px;
+  background: rgba(231, 136, 136, 0.08);
+  color: #f0a4a4;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .status-message {

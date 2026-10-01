@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch, type Ref } 
 import sampleRadarUrl from '../../assets/dpsri_240km_2026072320150000dBR.dpsri.png'
 import { analyzeArea } from '@/lib/detection'
 import { CanvasAccessError, loadRadarFrame } from '@/lib/frame'
+import { fetchLatestRadarImage } from '@/lib/radarApi'
 import { evaluateTransition } from '@/lib/transitions'
 import {
   millisecondsUntilNextBoundary,
@@ -26,11 +27,15 @@ interface MonitorOptions {
   notifyFailure: (message: string) => void
 }
 
+type RadarSource = 'data.gov.sg' | 'weather.gov.sg' | 'legacy' | null
+
 export function useRadarMonitor(options: MonitorOptions) {
   const status = ref<MonitoringStatus>('idle')
   const latestTimestamp = ref<string | null>(null)
   const overlayUrl = ref<string | null>(null)
   const lastError = ref<string | null>(null)
+  const radarSource = ref<RadarSource>(null)
+  const lastRadarCheck = ref<number | null>(null)
   const processed = new Set<string>()
   const testMode = ref(false)
   const testState = reactive<Record<string, AreaAlertState>>({})
@@ -44,7 +49,7 @@ export function useRadarMonitor(options: MonitorOptions) {
   let boundaryTimer: ReturnType<typeof setTimeout> | undefined
 
   function notifyFailure(message: string) {
-    const boundary = recentRadarTimestamps()[0] ?? radarTimestamp(new Date())
+    const boundary = radarTimestamp(new Date())
     if (notifiedFailureBoundary === boundary) return
     notifiedFailureBoundary = boundary
     options.notifyFailure(message)
@@ -97,43 +102,60 @@ export function useRadarMonitor(options: MonitorOptions) {
     }
   }
 
+  async function loadLegacyFallback(): Promise<RadarFrame | null> {
+    let lastFailure: unknown
+    for (const timestamp of recentRadarTimestamps()) {
+      if (processed.has(timestamp)) return null
+      try {
+        return await loadRadarFrame(radarUrl(timestamp), timestamp, 'live')
+      } catch (error) {
+        if (error instanceof CanvasAccessError) throw error
+        lastFailure = error
+      }
+    }
+    throw lastFailure instanceof Error
+      ? lastFailure
+      : new Error('No legacy radar image could be loaded.')
+  }
+
   async function poll() {
     if (!options.monitoring.value || status.value === 'checking') return
     if (!navigator.onLine) {
       status.value = 'offline'
       lastError.value = 'You appear to be offline. Existing rain states were preserved.'
       notifyFailure(lastError.value)
+      lastRadarCheck.value = Date.now()
+      scheduleNext()
       return
     }
     status.value = 'checking'
     lastError.value = null
-    for (const timestamp of recentRadarTimestamps()) {
-      if (processed.has(timestamp)) {
-        status.value = 'monitoring'
-        scheduleNext()
-        return
-      }
+    try {
+      let frame: RadarFrame | null = null
       try {
-        const url = radarUrl(timestamp)
-        const frame = await loadRadarFrame(url, timestamp, 'live')
-        processFrame(frame)
-        status.value = 'monitoring'
-        scheduleNext()
-        return
-      } catch (error) {
-        if (error instanceof CanvasAccessError) {
-          status.value = 'cors-blocked'
-          lastError.value =
-            'Live image analysis is blocked by the radar server. Test mode remains available.'
-          notifyFailure(lastError.value)
-          scheduleNext()
-          return
-        }
+        const { timestamp, url, source } = await fetchLatestRadarImage()
+        if (!processed.has(timestamp)) frame = await loadRadarFrame(url, timestamp, 'live')
+        radarSource.value = source as RadarSource
+      } catch {
+        frame = await loadLegacyFallback()
+        radarSource.value = 'legacy'
       }
+      if (frame) {
+        processFrame(frame)
+      }
+      status.value = 'monitoring'
+    } catch (error) {
+      if (error instanceof CanvasAccessError) {
+        status.value = 'cors-blocked'
+        lastError.value =
+          'Live image analysis is blocked by both radar sources. Test mode remains available.'
+      } else {
+        status.value = 'error'
+        lastError.value = 'The latest radar image could not be loaded. Existing rain states were preserved.'
+      }
+      notifyFailure(lastError.value)
     }
-    status.value = 'error'
-    lastError.value = 'No recent radar frame could be loaded. Existing rain states were preserved.'
-    notifyFailure(lastError.value)
+    lastRadarCheck.value = Date.now()
     scheduleNext()
   }
 
@@ -198,6 +220,25 @@ export function useRadarMonitor(options: MonitorOptions) {
   )
   const visibleState = computed(() => (testMode.value ? testState : options.liveState))
   const visibleReadings = computed(() => (testMode.value ? testReadings : liveReadings))
+  const radarAgeMinutes = computed(() => {
+    const timestamp = latestTimestamp.value
+    if (!timestamp) return null
+    const date = new Date(
+      `${timestamp.slice(0, 4)}-${timestamp.slice(4, 6)}-${timestamp.slice(6, 8)}T${timestamp.slice(8, 10)}:${timestamp.slice(10, 12)}:00+08:00`,
+    )
+    const now = Math.max(Date.now(), lastRadarCheck.value ?? 0)
+    return Math.max(0, Math.floor((now - date.getTime()) / 60_000))
+  })
+  const radarIsStale = computed(
+    () => !testMode.value && (radarAgeMinutes.value === null || radarAgeMinutes.value > 10),
+  )
+  const radarSourceLabel = computed(() => {
+    if (testMode.value) return 'Sample radar'
+    if (radarSource.value === 'data.gov.sg') return 'Source · data.gov.sg'
+    if (radarSource.value === 'weather.gov.sg') return 'Source · weather.gov.sg'
+    if (radarSource.value === 'legacy') return 'Source · local fallback'
+    return 'Source · waiting for radar'
+  })
 
   onMounted(() => {
     if (options.monitoring.value) void poll()
@@ -212,6 +253,9 @@ export function useRadarMonitor(options: MonitorOptions) {
     visibleState,
     visibleReadings,
     lastError,
+    radarSourceLabel,
+    radarAgeMinutes,
+    radarIsStale,
     testMode,
     poll,
     useSampleFrame,

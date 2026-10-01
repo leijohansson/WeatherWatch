@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import baseMapUrl from '../../assets/map_240km_v2.jpg'
 import { clientToNormalized, pointsAttribute } from '@/lib/geometry'
 import type { AlertArea, Point } from '@/types'
@@ -16,6 +16,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [id: string]
+  deselect: []
   'map-click': [point: Point]
   'move-vertex': [areaId: string, index: number, point: Point]
   'move-vertex-end': [areaId: string]
@@ -23,6 +24,8 @@ const emit = defineEmits<{
 
 const map = ref<HTMLElement>()
 const dragging = ref<{ areaId: string; index: number } | null>(null)
+let pendingPoint: Point | null = null
+let moveFrame: number | undefined
 
 function normalized(event: PointerEvent | MouseEvent) {
   const rect = map.value?.getBoundingClientRect()
@@ -30,7 +33,11 @@ function normalized(event: PointerEvent | MouseEvent) {
 }
 
 function onMapClick(event: MouseEvent) {
-  if (!props.drawing || dragging.value) return
+  if (dragging.value) return
+  if (!props.drawing) {
+    emit('deselect')
+    return
+  }
   const point = normalized(event)
   if (point) emit('map-click', point)
 }
@@ -45,13 +52,32 @@ function startDrag(event: PointerEvent, areaId: string, index: number) {
 function moveDrag(event: PointerEvent) {
   if (!dragging.value) return
   const point = normalized(event)
-  if (point) emit('move-vertex', dragging.value.areaId, dragging.value.index, point)
+  if (!point) return
+  pendingPoint = point
+  if (moveFrame !== undefined) return
+  moveFrame = requestAnimationFrame(() => {
+    moveFrame = undefined
+    flushPendingMove()
+  })
+}
+
+function flushPendingMove() {
+  if (!dragging.value || !pendingPoint) return
+  emit('move-vertex', dragging.value.areaId, dragging.value.index, pendingPoint)
+  pendingPoint = null
 }
 
 function endDrag() {
+  if (moveFrame !== undefined) cancelAnimationFrame(moveFrame)
+  moveFrame = undefined
+  flushPendingMove()
   if (dragging.value) emit('move-vertex-end', dragging.value.areaId)
   dragging.value = null
 }
+
+onBeforeUnmount(() => {
+  if (moveFrame !== undefined) cancelAnimationFrame(moveFrame)
+})
 
 const draftPoints = computed(() => pointsAttribute(props.draft))
 </script>
@@ -98,6 +124,7 @@ const draftPoints = computed(() => pointsAttribute(props.draft))
             :fill="area.color"
             class="vertex"
             @pointerdown="startDrag($event, area.id, index)"
+            @click.stop
           />
         </template>
       </g>

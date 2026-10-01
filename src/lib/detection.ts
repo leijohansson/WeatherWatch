@@ -57,9 +57,15 @@ export function analyzeArea(frame: RadarFrame, area: AlertArea): AreaReading {
   const qualifying = new Set<number>()
   const intensityMap = new Map<number, Intensity>()
   let maximumIntensity: Intensity | null = null
+  const xCoordinates = area.vertices.map(({ x }) => x)
+  const yCoordinates = area.vertices.map(({ y }) => y)
+  const startX = Math.max(0, Math.ceil(Math.min(...xCoordinates) * frame.width - 0.5))
+  const endX = Math.min(frame.width - 1, Math.floor(Math.max(...xCoordinates) * frame.width - 0.5))
+  const startY = Math.max(0, Math.ceil(Math.min(...yCoordinates) * frame.height - 0.5))
+  const endY = Math.min(frame.height - 1, Math.floor(Math.max(...yCoordinates) * frame.height - 0.5))
 
-  for (let y = 0; y < frame.height; y++) {
-    for (let x = 0; x < frame.width; x++) {
+  for (let y = startY; y <= endY; y++) {
+    for (let x = startX; x <= endX; x++) {
       if (!pointInPolygon({ x: (x + 0.5) / frame.width, y: (y + 0.5) / frame.height }, area.vertices))
         continue
       const index = y * frame.width + x

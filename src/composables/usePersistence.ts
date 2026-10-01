@@ -2,6 +2,7 @@ import { reactive, watch } from 'vue'
 import type { AlertArea, AreaAlertState, AlertEvent, PersistedState } from '@/types'
 
 const STORAGE_KEY = 'rainwatch-singapore:v1'
+const PERSIST_DELAY_MS = 250
 
 const defaultArea = (): AlertArea => ({
   id: crypto.randomUUID(),
@@ -25,6 +26,8 @@ export interface AppState {
   alertState: Record<string, AreaAlertState>
   monitoring: boolean
   overlayOpacity: number
+  soundAlerts: boolean
+  soundVolume: number
 }
 
 function defaults(): AppState {
@@ -34,6 +37,8 @@ function defaults(): AppState {
     alertState: {},
     monitoring: true,
     overlayOpacity: 0.82,
+    soundAlerts: false,
+    soundVolume: 70,
   }
 }
 
@@ -49,6 +54,8 @@ export function readPersistedState(storage: Pick<Storage, 'getItem'> = localStor
       alertState: parsed.alertState ?? {},
       monitoring: parsed.settings?.monitoring ?? true,
       overlayOpacity: parsed.settings?.overlayOpacity ?? 0.82,
+      soundAlerts: parsed.settings?.soundAlerts ?? false,
+      soundVolume: parsed.settings?.soundVolume ?? 70,
     }
   } catch {
     return defaults()
@@ -57,23 +64,33 @@ export function readPersistedState(storage: Pick<Storage, 'getItem'> = localStor
 
 export function usePersistence() {
   const state = reactive(readPersistedState())
+  let persistTimer: ReturnType<typeof setTimeout> | undefined
+  const persist = () => {
+    clearTimeout(persistTimer)
+    persistTimer = undefined
+    const persisted: PersistedState = {
+      version: 1,
+      areas: state.areas,
+      history: state.history.slice(0, 50),
+      alertState: state.alertState,
+      settings: {
+        monitoring: state.monitoring,
+        overlayOpacity: state.overlayOpacity,
+        soundAlerts: state.soundAlerts,
+        soundVolume: state.soundVolume,
+      },
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted))
+  }
   watch(
     state,
     () => {
-      const persisted: PersistedState = {
-        version: 1,
-        areas: state.areas,
-        history: state.history.slice(0, 50),
-        alertState: state.alertState,
-        settings: {
-          monitoring: state.monitoring,
-          overlayOpacity: state.overlayOpacity,
-        },
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted))
+      clearTimeout(persistTimer)
+      persistTimer = setTimeout(persist, PERSIST_DELAY_MS)
     },
     { deep: true },
   )
+  window.addEventListener('pagehide', persist, { once: true })
   return state
 }
 

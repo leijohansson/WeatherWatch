@@ -43,6 +43,11 @@ describe('Rainwatch app', () => {
     await name.trigger('change')
     expect(wrapper.find('polygon').attributes('points')).toBe('10,10 50,10 50,50')
     expect(wrapper.text()).toContain('Office')
+    expect(wrapper.findAll('circle.vertex')).toHaveLength(3)
+    await map.trigger('click')
+    expect(wrapper.findAll('circle.vertex')).toHaveLength(0)
+    expect(wrapper.text()).toContain('1 alert area configured')
+    expect(wrapper.text()).not.toContain('No alert areas yet')
     wrapper.unmount()
   })
 
@@ -94,7 +99,7 @@ describe('Rainwatch app', () => {
     const wrapper = mount(App)
     expect(wrapper.text()).toContain('Home')
     expect(wrapper.text()).toContain('Monitoring paused')
-    expect(wrapper.get('select').element.value).toBe('heavy')
+    expect(wrapper.get('input[aria-label="Minimum rain intensity"]').element.value).toBe('3')
   })
 
   it('reports offline monitoring without clearing persisted rain state', async () => {

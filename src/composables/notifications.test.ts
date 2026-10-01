@@ -1,3 +1,4 @@
+import { ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import { useNotifications } from './useNotifications'
 import type { AlertEvent } from '@/types'
@@ -86,5 +87,63 @@ describe('notifications', () => {
       title: 'Rainwatch radar check failed',
       body: 'No recent radar frame could be loaded.',
     })
+  })
+
+  it('plays the bundled sound when sound alerts are enabled', () => {
+    const play = vi.fn(() => Promise.resolve())
+    const pause = vi.fn()
+    class AudioSpy {
+      play = play
+      pause = pause
+      loop = false
+      volume = 1
+      currentTime = 0
+      constructor(_url: string) {}
+      addEventListener(_type: string, _listener: () => void) {}
+    }
+    vi.stubGlobal('Audio', AudioSpy)
+    const notifications = useNotifications(ref(true))
+
+    notifications.send({
+      id: 'event',
+      areaId: 'home',
+      areaName: 'Home',
+      reason: 'entry',
+      timestamp: '2026072320150000',
+      intensity: 'heavy',
+      pixelCount: 24,
+      source: 'live',
+    })
+
+    expect(play).toHaveBeenCalledOnce()
+  })
+
+  it('previews at the selected volume and can stop an active alert', async () => {
+    const play = vi.fn(() => Promise.resolve())
+    const pause = vi.fn()
+    class AudioSpy {
+      static latest: AudioSpy | undefined
+      play = play
+      pause = pause
+      loop = false
+      volume = 1
+      currentTime = 0
+      constructor(_url: string) {
+        AudioSpy.latest = this
+      }
+      addEventListener(_type: string, _listener: () => void) {}
+    }
+    vi.stubGlobal('Audio', AudioSpy)
+    const notifications = useNotifications(ref(true), ref(35))
+
+    notifications.previewAlertSound()
+    await Promise.resolve()
+    expect(AudioSpy.latest?.loop).toBe(false)
+    expect(AudioSpy.latest?.volume).toBe(0.35)
+    expect(notifications.alertPlaying.value).toBe(true)
+
+    notifications.stopAlertSound()
+    expect(pause).toHaveBeenCalledOnce()
+    expect(notifications.alertPlaying.value).toBe(false)
   })
 })

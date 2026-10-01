@@ -7,10 +7,11 @@ import StatusPill from '@/components/StatusPill.vue'
 import { useNotifications } from '@/composables/useNotifications'
 import { usePersistence } from '@/composables/usePersistence'
 import { useRadarMonitor } from '@/composables/useRadarMonitor'
+import { INTENSITY_LABELS } from '@/lib/palette'
 import type { AlertArea, AlertEvent, Point } from '@/types'
 
 const state = usePersistence()
-const notifications = useNotifications()
+const notifications = useNotifications(toRef(state, 'soundAlerts'), toRef(state, 'soundVolume'))
 const selectedId = ref<string | null>(state.areas[0]?.id ?? null)
 const drawing = ref(false)
 const draft = ref<Point[]>([])
@@ -133,7 +134,7 @@ function formatTimestamp(timestamp: string | null) {
           <h1>Watch the weather<br /><em>where it matters.</em></h1>
         </div>
         <p class="intro">
-          Draw the places you care about. Rainwatch checks Singapore's radar every 15 minutes
+          Draw the places you care about. Rainwatch refreshes Singapore's radar every 3 minutes
           and lets you know when rain arrives.
         </p>
       </section>
@@ -141,9 +142,17 @@ function formatTimestamp(timestamp: string | null) {
       <div class="workspace">
         <section class="map-panel">
           <div class="map-toolbar">
-            <div>
-              <span class="toolbar-label">RADAR · 240 KM</span>
-              <strong>{{ formatTimestamp(monitor.visibleTimestamp.value) }}</strong>
+            <div class="radar-details">
+              <div class="radar-time">
+                <span class="toolbar-label">RADAR · 240 KM</span>
+                <strong>{{ formatTimestamp(monitor.visibleTimestamp.value) }}</strong>
+              </div>
+              <span class="radar-source">{{ monitor.radarSourceLabel.value }}</span>
+              <span v-if="monitor.radarIsStale.value" class="stale-radar-warning">
+                {{ monitor.radarAgeMinutes.value === null
+                  ? 'No radar image received yet'
+                  : `Radar image is ${monitor.radarAgeMinutes.value} min old` }}
+              </span>
             </div>
             <label>
               Overlay
@@ -167,6 +176,7 @@ function formatTimestamp(timestamp: string | null) {
             :overlay-opacity="state.overlayOpacity"
             :rainy-area-ids="rainyAreaIds"
             @select="selectedId = $event"
+            @deselect="selectedId = null"
             @map-click="draft.push($event)"
             @move-vertex="moveVertex"
             @move-vertex-end="monitor.reanalyzeArea($event)"
@@ -178,7 +188,7 @@ function formatTimestamp(timestamp: string | null) {
               <i class="legend-gradient" />
               <span>INTENSE</span>
             </div>
-            <span>Singapore time · Updates every 15 min</span>
+            <span>Singapore time · Refreshes every 3 min</span>
           </div>
         </section>
 
@@ -233,6 +243,26 @@ function formatTimestamp(timestamp: string | null) {
                 @change="monitor.reanalyzeArea(selectedArea.id)"
                 @delete="deleteSelected"
               />
+              <div v-else-if="state.areas.length" class="areas-summary">
+                <p class="eyebrow">Monitoring summary</p>
+                <h3>{{ state.areas.length }} alert {{ state.areas.length === 1 ? 'area' : 'areas' }} configured</h3>
+                <button
+                  v-for="area in state.areas"
+                  :key="area.id"
+                  class="area-summary-row"
+                  type="button"
+                  @click="selectedId = area.id"
+                >
+                  <i :style="{ background: area.color }" />
+                  <span>
+                    <strong>{{ area.name }}</strong>
+                    <small>
+                      {{ area.enabled ? 'Enabled' : 'Paused' }} · {{ INTENSITY_LABELS[area.intensityThreshold] }}+ · {{ area.pixelThreshold }} px
+                    </small>
+                  </span>
+                  <em v-if="rainyAreaIds.has(area.id)">RAIN</em>
+                </button>
+              </div>
               <div v-else class="empty-areas">
                 <p>No alert areas yet.</p>
                 <button class="primary-button" type="button" @click="startDrawing">
@@ -247,13 +277,45 @@ function formatTimestamp(timestamp: string | null) {
               <span class="pulse-dot" :class="{ active: state.monitoring }" />
               <div>
                 <strong>Automatic monitoring</strong>
-                <small>Checks one minute after each quarter hour</small>
+                <small>Refreshes every 3 minutes to catch delayed images</small>
               </div>
               <input v-model="state.monitoring" type="checkbox" aria-label="Automatic monitoring" />
             </div>
             <p v-if="monitor.lastError.value" class="status-message">
               {{ monitor.lastError.value }}
             </p>
+            <label class="toggle-row sound-alert-toggle">
+              <span>
+                <strong>Sound alerts</strong>
+                <small>Play a sound when rain triggers an alert</small>
+              </span>
+              <input v-model="state.soundAlerts" type="checkbox" aria-label="Sound alerts" />
+            </label>
+            <div class="sound-volume-control">
+              <label for="sound-volume">
+                Alert volume
+                <output for="sound-volume">{{ state.soundVolume }}%</output>
+              </label>
+              <input
+                id="sound-volume"
+                v-model.number="state.soundVolume"
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                aria-label="Alert volume"
+                @input="notifications.previewAlertSound"
+              />
+              <small>Adjust to preview the alert sound.</small>
+            </div>
+            <button
+              v-if="notifications.alertPlaying.value"
+              class="stop-alert-button"
+              type="button"
+              @click="notifications.stopAlertSound"
+            >
+              Stop alert
+            </button>
             <button
               class="check-button"
               type="button"
