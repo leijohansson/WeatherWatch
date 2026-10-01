@@ -65,6 +65,7 @@ export interface LightningAlertEvent extends AlertEventBase {
   cloudCount: number
   bufferKm: number
   nearestKm: number
+  nearestType: StrikeType
   openLive: boolean
 }
 

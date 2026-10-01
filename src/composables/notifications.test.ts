@@ -50,8 +50,8 @@ describe('notifications', () => {
 
     expect(notifications.permission.value).toBe('granted')
     expect(created[0]).toEqual({
-      title: 'Rainwatch notifications enabled',
-      body: 'Desktop alerts are ready. Keep Rainwatch open so it can monitor the radar.',
+      title: 'WeatherWatch notifications enabled',
+      body: 'Desktop alerts are ready. Keep WeatherWatch open so it can monitor radar and lightning.',
     })
     expect(notifications.feedback.value).toBe('Test notification sent. Desktop alerts are ready.')
   })
@@ -84,7 +84,7 @@ describe('notifications', () => {
     notifications.sendRadarFailure('No recent radar frame could be loaded.')
 
     expect(created[0]).toEqual({
-      title: 'Rainwatch radar check failed',
+      title: 'WeatherWatch radar check failed',
       body: 'No recent radar frame could be loaded.',
     })
   })

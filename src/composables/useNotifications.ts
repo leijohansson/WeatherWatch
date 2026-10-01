@@ -113,9 +113,9 @@ export function useNotifications(soundAlerts?: Ref<boolean>, soundVolume?: Ref<n
       return
     }
 
-    const sent = show('Rainwatch notifications enabled', {
-      body: 'Desktop alerts are ready. Keep Rainwatch open so it can monitor the radar.',
-      tag: 'rainwatch-notifications-ready',
+    const sent = show('WeatherWatch notifications enabled', {
+      body: 'Desktop alerts are ready. Keep WeatherWatch open so it can monitor radar and lightning.',
+      tag: 'weatherwatch-notifications-ready',
     })
     feedback.value = sent
       ? 'Test notification sent. Desktop alerts are ready.'
@@ -152,9 +152,9 @@ export function useNotifications(soundAlerts?: Ref<boolean>, soundVolume?: Ref<n
   }
 
   function sendRadarFailure(message: string) {
-    show('Rainwatch radar check failed', {
+    show('WeatherWatch radar check failed', {
       body: message,
-      tag: 'rainwatch-radar-failure',
+      tag: 'weatherwatch-radar-failure',
     })
   }
 

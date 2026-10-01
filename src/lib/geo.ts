@@ -72,3 +72,36 @@ export function centroid(points: LatLon[]): LatLon | null {
   })
   return { lat: sum.lat / points.length, lon: sum.lon / points.length }
 }
+
+function convexHull(points: Point[]): Point[] {
+  const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y)
+  if (sorted.length < 3) return sorted
+  const cross = (o: Point, a: Point, b: Point) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
+  const lower: Point[] = []
+  for (const p of sorted) {
+    while (lower.length >= 2 && cross(lower.at(-2)!, lower.at(-1)!, p) <= 0) lower.pop()
+    lower.push(p)
+  }
+  const upper: Point[] = []
+  for (const p of [...sorted].reverse()) {
+    while (upper.length >= 2 && cross(upper.at(-2)!, upper.at(-1)!, p) <= 0) upper.pop()
+    upper.push(p)
+  }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)]
+}
+
+/**
+ * Outline of a polygon grown by `km`, for drawing. It is the convex hull of the grown shape: exact
+ * for convex areas and slightly generous for concave ones. Alerts use exact distances instead.
+ */
+export function bufferOutline(polygon: LatLon[], km: number, steps = 24): LatLon[] {
+  const points: Point[] = []
+  for (const vertex of polygon) {
+    const p = project(vertex.lat, vertex.lon)
+    for (let i = 0; i < steps; i++) {
+      const angle = (2 * Math.PI * i) / steps
+      points.push({ x: p.x + km * Math.cos(angle), y: p.y + km * Math.sin(angle) })
+    }
+  }
+  return convexHull(points).map(unproject)
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  bufferOutline,
   distanceKm,
   distanceToPolygonKm,
   latLonToNormalized,
@@ -52,5 +53,22 @@ describe('geo', () => {
     expect(distanceToPolygonKm({ lat: 1.35, lon: 103.85 }, square)).toBe(0)
     const east = distanceToPolygonKm({ lat: 1.35, lon: 104.0 }, square)
     expect(east).toBeCloseTo(distanceKm({ lat: 1.35, lon: 103.9 }, { lat: 1.35, lon: 104.0 }), 1)
+  })
+})
+
+describe('buffer outline', () => {
+  it('grows a square by the buffer distance', () => {
+    const square = [
+      { lat: 1.3, lon: 103.8 },
+      { lat: 1.3, lon: 103.9 },
+      { lat: 1.4, lon: 103.9 },
+      { lat: 1.4, lon: 103.8 },
+    ]
+    const outline = bufferOutline(square, 5)
+    for (const point of outline) {
+      expect(distanceToPolygonKm(point, square)).toBeGreaterThan(4.9)
+      expect(distanceToPolygonKm(point, square)).toBeLessThanOrEqual(5.01)
+    }
+    expect(bufferOutline(square, 0).length).toBe(4)
   })
 })

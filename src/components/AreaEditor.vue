@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { INTENSITIES, type AlertArea, type AreaReading, type Intensity } from '@/types'
+import { formatClock, strikeCountText } from '@/lib/alertText'
+import { formatKm, type AreaLightningReading } from '@/lib/lightning'
 import { INTENSITY_LABELS, INTENSITY_RANK } from '@/lib/palette'
 
-const props = defineProps<{ area: AlertArea; reading: AreaReading | undefined }>()
+const props = defineProps<{
+  area: AlertArea
+  reading: AreaReading | undefined
+  lightning?: AreaLightningReading | undefined
+}>()
 const emit = defineEmits<{ delete: []; change: [] }>()
 
 const intensityValue = computed({
@@ -92,6 +98,68 @@ const intensityValue = computed({
         @change="emit('change')"
       />
     </label>
+    <div class="lightning-settings">
+      <label class="toggle-row">
+        <span>
+          <strong>Alert on observed lightning</strong>
+          <small>Strikes inside the area or its buffer</small>
+        </span>
+        <input
+          v-model="area.lightningEnabled"
+          type="checkbox"
+          aria-label="Alert on observed lightning"
+          @change="emit('change')"
+        />
+      </label>
+      <template v-if="area.lightningEnabled">
+        <div class="field">
+          <label for="lightning-buffer">
+            Lightning buffer
+            <span class="field-value">{{ area.lightningBufferKm }} km</span>
+          </label>
+          <input
+            id="lightning-buffer"
+            v-model.number="area.lightningBufferKm"
+            type="range"
+            min="0"
+            max="20"
+            step="1"
+            @change="emit('change')"
+          />
+          <p>Drawn as a dashed ring around the area.</p>
+        </div>
+        <div class="field">
+          <label for="lightning-types">Strike types</label>
+          <select id="lightning-types" v-model="area.lightningTypes" @change="emit('change')">
+            <option value="cg">Cloud-to-ground only</option>
+            <option value="cg+cc">Ground + cloud</option>
+          </select>
+          <div v-if="lightning && lightning.groundCount + lightning.cloudCount > 0" class="reading-summary act">
+            <strong>{{ strikeCountText(lightning.groundCount, lightning.cloudCount) }} inside buffer</strong>
+            <span>
+              Nearest {{ formatKm(lightning.nearestKm ?? 0) }}
+              <template v-if="lightning.latestTime"> · {{ formatClock(lightning.latestTime) }}</template>
+            </span>
+          </div>
+          <div v-else-if="lightning" class="reading-summary met">
+            <strong>No strikes inside buffer</strong>
+            <span>Last 15 min</span>
+          </div>
+        </div>
+        <label class="toggle-row">
+          <span>
+            <strong>Open Live on alert</strong>
+            <small>The notification opens Live, centred on this area</small>
+          </span>
+          <input
+            v-model="area.openLiveOnAlert"
+            type="checkbox"
+            aria-label="Open Live on alert"
+            @change="emit('change')"
+          />
+        </label>
+      </template>
+    </div>
     <button class="danger-button" type="button" @click="emit('delete')">Delete area</button>
   </section>
 </template>

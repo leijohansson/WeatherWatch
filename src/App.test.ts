@@ -17,7 +17,7 @@ function mountApp() {
   return mount(App, { attachTo: document.body })
 }
 
-describe('Rainwatch app', () => {
+describe('WeatherWatch app', () => {
   it('creates a polygon with normalized vertices and edits its settings', async () => {
     const wrapper = mountApp()
     await wrapper.get('button.add-button').trigger('click')
@@ -41,7 +41,7 @@ describe('Rainwatch app', () => {
     const name = wrapper.get('input[aria-label="Area name"]')
     await name.setValue('Office')
     await name.trigger('change')
-    expect(wrapper.find('polygon').attributes('points')).toBe('10,10 50,10 50,50')
+    expect(wrapper.find('polygon.area-shape').attributes('points')).toBe('10,10 50,10 50,50')
     expect(wrapper.text()).toContain('Office')
     expect(wrapper.findAll('circle.vertex')).toHaveLength(3)
     await map.trigger('click')
@@ -124,6 +124,75 @@ describe('Rainwatch app', () => {
     expect(wrapper.text()).toContain('Offline')
     expect(wrapper.text()).toContain('Existing rain states were preserved')
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).alertState.home.rainy).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('switches modes with the tabs and drops the hero', async () => {
+    window.location.hash = ''
+    const wrapper = mountApp()
+    expect(wrapper.text()).not.toContain('Watch the weather')
+    const tabs = wrapper.findAll('.mode-tab')
+    expect(tabs).toHaveLength(2)
+    expect(tabs[0]?.classes()).toContain('selected')
+    await tabs[1]!.trigger('click')
+    await flushPromises()
+    expect(window.location.hash).toBe('#/live')
+    expect(wrapper.findAll('.mode-tab')[1]?.classes()).toContain('selected')
+    expect(wrapper.find('[data-testid="radar-map"]').exists()).toBe(false)
+    window.location.hash = '#/watch'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="radar-map"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('raises a lightning alert from the test storm and links into Live', async () => {
+    window.location.hash = ''
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        areas: [
+          {
+            id: 'central',
+            name: 'Central',
+            color: '#ffb454',
+            enabled: true,
+            vertices: [
+              { x: 0.4, y: 0.48 },
+              { x: 0.58, y: 0.48 },
+              { x: 0.58, y: 0.62 },
+              { x: 0.4, y: 0.62 },
+            ],
+            intensityThreshold: 'moderate',
+            pixelThreshold: 20,
+            notifyNewCell: true,
+            lightningEnabled: true,
+            lightningBufferKm: 5,
+            lightningTypes: 'cg',
+            openLiveOnAlert: true,
+          },
+        ],
+        history: [],
+        alertState: {},
+        settings: { monitoring: false, overlayOpacity: 0.8, soundAlerts: false, soundVolume: 70 },
+        liveLocations: [],
+        live: {},
+        lightningState: {},
+      }),
+    )
+    const wrapper = mount(App, { attachTo: document.body })
+    const stormButton = wrapper.findAll('.test-card button').find((b) => b.text() === 'Lightning storm')
+    await stormButton!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Test mode')
+    expect(wrapper.text()).toContain('Lightning nearby')
+    expect(wrapper.text()).toMatch(/\d+ ground within 5 km · nearest/)
+    expect(wrapper.get('.event-link').attributes('href')).toBe('#/live?focus=central&from=alert')
+    expect(wrapper.findAll('.strike-mark').length).toBeGreaterThan(20)
+    // Test storms never touch the persisted lightning state.
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}').lightningState ?? {}).toEqual({})
     wrapper.unmount()
   })
 })
