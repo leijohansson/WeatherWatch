@@ -24,6 +24,8 @@ api_router = APIRouter(prefix="/api")
 import httpx
 import datetime
 import logging
+import os
+import time
 from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -147,6 +149,51 @@ async def weather_radar(path: str, request: Request):
         status_code=resp.status_code,
         media_type=resp.headers.get("content-type"),
     )
+
+LIGHTNING_URL = "https://api-open.data.gov.sg/v2/real-time/api/weather"
+LIGHTNING_CACHE_SECONDS = 30
+_lightning_cache: dict[str, tuple[float, int, bytes]] = {}
+
+
+@api_router.api_route("/lightning", methods=["GET"])
+async def lightning(date: str):
+    """Proxy data.gov.sg lightning observations for one SGT day (YYYY-MM-DD), newest first.
+
+    The first page covers about 50 minutes, which is all Live mode needs. Responses are
+    cached briefly so every open tab shares one upstream request.
+    """
+    try:
+        datetime.date.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+
+    now = time.monotonic()
+    cached = _lightning_cache.get(date)
+    if cached and now - cached[0] < LIGHTNING_CACHE_SECONDS:
+        return Response(content=cached[2], status_code=cached[1], media_type="application/json")
+
+    headers = {}
+    if api_key := os.environ.get("DATA_GOV_API_KEY"):
+        headers["x-api-key"] = api_key
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(
+                LIGHTNING_URL,
+                params={"api": "lightning", "date": date},
+                headers=headers,
+                timeout=10.0,
+            )
+        except httpx.HTTPError as e:
+            logger.warning(f"Lightning feed request failed: {e}")
+            raise HTTPException(status_code=502, detail="Lightning feed unavailable")
+
+    if resp.status_code in (200, 404):
+        _lightning_cache[date] = (now, resp.status_code, resp.content)
+        for key in [key for key in _lightning_cache if key != date]:
+            if now - _lightning_cache[key][0] > 3600:
+                del _lightning_cache[key]
+    return Response(content=resp.content, status_code=resp.status_code, media_type="application/json")
+
 
 app.include_router(api_router)
 app.mount("/", SPAStaticFiles(directory="dist", html=True), name="mappy-spa")
