@@ -73,7 +73,7 @@ export function centroid(points: LatLon[]): LatLon | null {
   return { lat: sum.lat / points.length, lon: sum.lon / points.length }
 }
 
-function convexHull(points: Point[]): Point[] {
+export function convexHull(points: Point[]): Point[] {
   const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y)
   if (sorted.length < 3) return sorted
   const cross = (o: Point, a: Point, b: Point) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, toRef } from 'vue'
+import { computed, nextTick, reactive, ref, toRef, watch } from 'vue'
 import ModeTabs from '@/components/ModeTabs.vue'
 import StatusPill from '@/components/StatusPill.vue'
 import { useLightningFeed } from '@/composables/useLightningFeed'
@@ -80,6 +80,12 @@ const lightningReadings = computed(() => {
 function selectMode(mode: Mode) {
   navigate(routeHash(mode))
 }
+
+// Each mode starts at the top, rather than at the other mode's scroll position.
+watch(
+  () => route.value.mode,
+  () => window.scrollTo?.({ top: 0 }),
+)
 </script>
 
 <template>

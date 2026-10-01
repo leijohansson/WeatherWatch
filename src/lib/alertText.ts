@@ -14,9 +14,14 @@ export function strikeCountText(ground: number, cloud: number): string {
   return parts.join(' + ')
 }
 
+/** "nearest 2.2 km", or "one inside the area" when the nearest strike is inside it. */
+export function nearestText(km: number): string {
+  return km === 0 ? 'one inside the area' : `nearest ${formatKm(km)}`
+}
+
 /** "3 ground + 5 cloud within 5 km · nearest 2.2 km" */
 export function lightningDetail(event: LightningAlertEvent): string {
-  return `${strikeCountText(event.groundCount, event.cloudCount)} within ${event.bufferKm} km · nearest ${formatKm(event.nearestKm)}`
+  return `${strikeCountText(event.groundCount, event.cloudCount)} within ${event.bufferKm} km · ${nearestText(event.nearestKm)}`
 }
 
 export function rainDetail(event: RainAlertEvent, suffix = 'threshold'): string {

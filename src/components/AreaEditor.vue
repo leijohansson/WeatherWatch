@@ -137,7 +137,7 @@ const intensityValue = computed({
           <div v-if="lightning && lightning.groundCount + lightning.cloudCount > 0" class="reading-summary act">
             <strong>{{ strikeCountText(lightning.groundCount, lightning.cloudCount) }} inside buffer</strong>
             <span>
-              Nearest {{ formatKm(lightning.nearestKm ?? 0) }}
+              {{ lightning.nearestKm ? `Nearest ${formatKm(lightning.nearestKm)}` : 'Inside the area' }}
               <template v-if="lightning.latestTime"> · {{ formatClock(lightning.latestTime) }}</template>
             </span>
           </div>

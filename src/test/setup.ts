@@ -62,6 +62,7 @@ Object.defineProperty(navigator, 'onLine', {
   value: true,
 })
 Element.prototype.setPointerCapture = vi.fn()
+window.scrollTo = vi.fn() as never
 
 // jsdom has no object URLs; tests that need a specific value spy on these.
 Object.defineProperty(URL, 'createObjectURL', {

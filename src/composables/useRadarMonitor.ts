@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch, type Ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch, type Ref } from 'vue'
 import sampleRadarUrl from '../../assets/dpsri_240km_2026072320150000dBR.dpsri.png'
 import { analyzeArea } from '@/lib/detection'
 import { CanvasAccessError, loadRadarFrame } from '@/lib/frame'
@@ -45,6 +45,9 @@ export function useRadarMonitor(options: MonitorOptions) {
   const testOverlayUrl = ref<string | null>(null)
   let liveFrame: RadarFrame | null = null
   let testFrame: RadarFrame | null = null
+  // Frames for Live mode's cluster layer; shallow so the pixel buffer isn't made reactive.
+  const liveFrameRef = shallowRef<RadarFrame | null>(null)
+  const testFrameRef = shallowRef<RadarFrame | null>(null)
   let notifiedFailureBoundary: string | null = null
   let boundaryTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -56,8 +59,13 @@ export function useRadarMonitor(options: MonitorOptions) {
   }
 
   function processFrame(frame: RadarFrame) {
-    if (frame.source === 'live') liveFrame = frame
-    else testFrame = frame
+    if (frame.source === 'live') {
+      liveFrame = frame
+      liveFrameRef.value = frame
+    } else {
+      testFrame = frame
+      testFrameRef.value = frame
+    }
     const state = frame.source === 'live' ? options.liveState : testState
     const readings = frame.source === 'live' ? liveReadings : testReadings
     const events: AlertEvent[] = []
@@ -215,6 +223,7 @@ export function useRadarMonitor(options: MonitorOptions) {
   const visibleOverlay = computed(() =>
     testMode.value ? testOverlayUrl.value : overlayUrl.value,
   )
+  const visibleFrame = computed(() => (testMode.value ? testFrameRef.value : liveFrameRef.value))
   const visibleTimestamp = computed(() =>
     testMode.value ? testTimestamp.value : latestTimestamp.value,
   )
@@ -250,6 +259,7 @@ export function useRadarMonitor(options: MonitorOptions) {
     latestTimestamp,
     visibleTimestamp,
     visibleOverlay,
+    visibleFrame,
     visibleState,
     visibleReadings,
     lastError,

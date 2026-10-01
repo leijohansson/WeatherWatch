@@ -187,7 +187,7 @@ describe('WeatherWatch app', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Test mode')
     expect(wrapper.text()).toContain('Lightning nearby')
-    expect(wrapper.text()).toMatch(/\d+ ground within 5 km · nearest/)
+    expect(wrapper.text()).toMatch(/\d+ ground within 5 km · (nearest|one inside the area)/)
     expect(wrapper.get('.event-link').attributes('href')).toBe('#/live?focus=central&from=alert')
     expect(wrapper.findAll('.strike-mark').length).toBeGreaterThan(20)
     // Test storms never touch the persisted lightning state.
