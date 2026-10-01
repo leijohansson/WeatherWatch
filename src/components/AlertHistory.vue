@@ -1,15 +1,10 @@
 <script setup lang="ts">
-import { lightningDetail, liveHref, parseCompactTimestamp, rainDetail, REASON_LABELS } from '@/lib/alertText'
+import { parseCompactTimestamp, rainDetail, REASON_LABELS } from '@/lib/alertText'
 import type { AlertEvent } from '@/types'
 
 defineProps<{ events: AlertEvent[] }>()
 defineEmits<{ clear: [] }>()
 
-function detail(event: AlertEvent) {
-  return event.reason === 'lightning'
-    ? lightningDetail(event)
-    : `${rainDetail(event)} · ${event.pixelCount} px`
-}
 
 function formatTime(timestamp: string) {
   const date = parseCompactTimestamp(timestamp)
@@ -45,10 +40,7 @@ function formatTime(timestamp: string) {
         <span class="event-icon" :class="event.reason">●</span>
         <div>
           <strong>{{ event.source === 'test' ? 'Test · ' : '' }}{{ REASON_LABELS[event.reason] }}</strong>
-          <p>{{ event.areaName }} · {{ detail(event) }}</p>
-          <a v-if="event.reason === 'lightning'" class="event-link" :href="liveHref(event.areaId)">
-            Open in Live →
-          </a>
+          <p>{{ event.areaName }} · {{ rainDetail(event) }} · {{ event.pixelCount }} px</p>
         </div>
         <time>{{ formatTime(event.timestamp) }}</time>
       </li>

@@ -1,5 +1,6 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch, type Ref } from 'vue'
 import sampleRadarUrl from '../../assets/dpsri_240km_2026072320150000dBR.dpsri.png'
+import stormRadarUrl from '../../assets/storm_radar_sample.png'
 import { analyzeArea } from '@/lib/detection'
 import { CanvasAccessError, loadRadarFrame } from '@/lib/frame'
 import { fetchLatestRadarImage } from '@/lib/radarApi'
@@ -58,7 +59,7 @@ export function useRadarMonitor(options: MonitorOptions) {
     options.notifyFailure(message)
   }
 
-  function processFrame(frame: RadarFrame) {
+  function processFrame(frame: RadarFrame, raiseAlerts = true) {
     if (frame.source === 'live') {
       liveFrame = frame
       liveFrameRef.value = frame
@@ -77,7 +78,7 @@ export function useRadarMonitor(options: MonitorOptions) {
       state[area.id] = transition.next
       events.push(...transition.events)
     }
-    if (events.length) options.addEvents(events)
+    if (events.length && raiseAlerts) options.addEvents(events)
     if (frame.source === 'live') {
       latestTimestamp.value = frame.timestamp
       overlayUrl.value = frame.url
@@ -173,18 +174,29 @@ export function useRadarMonitor(options: MonitorOptions) {
     boundaryTimer = setTimeout(() => void poll(), millisecondsUntilNextBoundary())
   }
 
-  async function useSampleFrame() {
+  async function useTestFrame(url: string, timestamp: string, raiseAlerts = true) {
     testMode.value = true
     lastError.value = null
     try {
-      const timestamp = '2026072320150000'
-      const frame = await loadRadarFrame(sampleRadarUrl, timestamp, 'test')
-      testOverlayUrl.value = sampleRadarUrl
-      return processFrame(frame)
+      const frame = await loadRadarFrame(url, timestamp, 'test')
+      testOverlayUrl.value = url
+      return processFrame(frame, raiseAlerts)
     } catch (error) {
       lastError.value = error instanceof Error ? error.message : 'The sample frame could not be read.'
       return []
     }
+  }
+
+  function useSampleFrame() {
+    return useTestFrame(sampleRadarUrl, '2026072320150000')
+  }
+
+  /**
+   * Rain to go with Live mode's test storm, stamped now so it reads as current. It doesn't raise
+   * Watch alerts: the storm is for trying Live.
+   */
+  function useStormFrame() {
+    return useTestFrame(stormRadarUrl, radarTimestamp(new Date()), false)
   }
 
   function useClearFrame() {
@@ -269,6 +281,7 @@ export function useRadarMonitor(options: MonitorOptions) {
     testMode,
     poll,
     useSampleFrame,
+    useStormFrame,
     useClearFrame,
     leaveTestMode,
     processFrame,

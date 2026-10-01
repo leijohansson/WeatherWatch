@@ -149,3 +149,52 @@ describe('radar monitor area edits', () => {
     wrapper.unmount()
   })
 })
+
+describe('radar monitor test frames', () => {
+  it('raises test alerts for the sample frame but not for the Live test storm', async () => {
+    // Every pixel the canvas returns is moderate rain.
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
+      drawImage: vi.fn(),
+      getImageData: (_x: number, _y: number, width: number, height: number) => {
+        const data = new Uint8ClampedArray(width * height * 4)
+        for (let i = 0; i < data.length; i += 4) data.set([30, 250, 0, 255], i)
+        return { data }
+      },
+    })) as never
+    const area: AlertArea = {
+      id: 'home',
+      name: 'Home',
+      color: '#ff0000',
+      enabled: true,
+      vertices: [
+        { x: 0.4, y: 0.4 },
+        { x: 0.6, y: 0.4 },
+        { x: 0.6, y: 0.6 },
+      ],
+      intensityThreshold: 'moderate',
+      pixelThreshold: 1,
+      notifyNewCell: false,
+    }
+    const events: AlertEvent[] = []
+    let monitor!: ReturnType<typeof useRadarMonitor>
+    const wrapper = mountMonitor(() => {
+      monitor = useRadarMonitor({
+        areas: ref([area]),
+        monitoring: ref(false),
+        liveState: reactive({}),
+        addEvents: (next) => events.push(...next),
+        notifyFailure: () => undefined,
+      })
+    })
+
+    await monitor.useStormFrame()
+    expect(monitor.testMode.value).toBe(true)
+    expect(monitor.visibleReadings.value.home?.rainy).toBe(true)
+    expect(events).toHaveLength(0)
+
+    monitor.leaveTestMode()
+    await monitor.useSampleFrame()
+    expect(events.map((event) => event.source)).toEqual(['test'])
+    wrapper.unmount()
+  })
+})

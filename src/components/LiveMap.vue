@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useGeoLayers } from '@/composables/useGeoLayers'
 import { SECTOR_CLASS_COLORS, type RadarClusterShape, type SectorClass } from '@/lib/forecast'
 import { project, RADAR_BOUNDS, unproject } from '@/lib/geo'
@@ -48,7 +48,6 @@ const MAX_SCALE = 60
 const PAN_NW = project(2.1, 103.0)
 const PAN_SE = project(0.6, 104.7)
 
-const uid = useId()
 const { coast } = useGeoLayers()
 const container = ref<HTMLElement>()
 const size = ref({ w: 800, h: 600 })
@@ -130,9 +129,8 @@ const radarBox = computed(() => {
   return { x: nw.x, y: nw.y, width: se.x - nw.x, height: se.y - nw.y }
 })
 
-// Layer 3: sectors. Hatch pattern sizes are in km, so they're rescaled to stay 7 px / 2.4 px on screen.
-const hatch = computed(() => ({ pitch: 7 / scale.value, stripe: 2.4 / scale.value }))
-const sectorClasses: SectorClass[] = ['discrepancy', 'thunderstorm', 'clear']
+// Layer 3: sectors. Solid tints; clear sectors are fainter so storms stand out.
+const SECTOR_FILL_OPACITY: Record<SectorClass, number> = { discrepancy: 0.3, thunderstorm: 0.26, clear: 0.1 }
 const sectorLabels = computed(() =>
   props.sectors.flatMap((sector) => {
     if (!sector.showLabel || !sector.anchor) return []
@@ -264,20 +262,6 @@ defineExpose({ recentre, zoomBy })
     @wheel="onWheel"
   >
     <svg :width="size.w" :height="size.h" class="live-map-svg" aria-label="Live lightning map">
-      <defs>
-        <pattern
-          v-for="cls in sectorClasses"
-          :id="`${uid}-hatch-${cls}`"
-          :key="cls"
-          patternUnits="userSpaceOnUse"
-          :width="hatch.pitch"
-          :height="hatch.pitch"
-          patternTransform="rotate(45)"
-        >
-          <rect :width="hatch.stripe" :height="hatch.pitch" :fill="SECTOR_CLASS_COLORS[cls]" fill-opacity="0.42" />
-        </pattern>
-      </defs>
-
       <g :transform="transform">
         <!-- 1. Base map -->
         <path
@@ -304,7 +288,8 @@ defineExpose({ recentre, zoomBy })
             :d="sector.path"
             fill-rule="evenodd"
             :class="sector.cls ? `sector forecast ${sector.cls}` : 'sector plain'"
-            :fill="sector.cls ? `url(#${uid}-hatch-${sector.cls})` : 'none'"
+            :fill="sector.cls ? SECTOR_CLASS_COLORS[sector.cls] : 'none'"
+            :fill-opacity="sector.cls ? SECTOR_FILL_OPACITY[sector.cls] : undefined"
             :stroke="sector.cls ? SECTOR_CLASS_COLORS[sector.cls] : '#47666d'"
           >
             <title>{{ sector.name }}</title>

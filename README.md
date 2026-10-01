@@ -8,7 +8,7 @@ uv run fastapi dev
 | Variable | Used for |
 | --- | --- |
 | `DATA_GOV_API_KEY` | Optional. Higher data.gov.sg rate limits for lightning and the 2-hour forecast. |
-| `SAFEGUARDIAN_BEARER_TOKEN` | Optional. Army Cat1 Discrepancy. Without it, Army sectors show Thunderstorm/Clear only. |
+| `SAFEGUARDIAN_BEARER_TOKEN` | Army Cat1 Discrepancy (SafeGuardian CAT status). Without it, Army sectors show Thunderstorm/Clear only and Live says so. |
 
 ## Map layers
 
@@ -21,3 +21,7 @@ python3 scripts/build_geo.py coast --sea goas_v01.shp       # Marine Regions sea
 python3 scripts/build_geo.py townships "Nowcast Sectors2.shp"
 python3 scripts/build_geo.py army MFOSectors.txt
 ```
+
+Live's test storm uses `src/test/fixtures/lightning-sample.json` for strikes and
+`assets/storm_radar_sample.png` for radar. The radar is rebuilt from the colour table in
+`dbr_mapping.py` with `python3 scripts/build_storm_radar.py`.

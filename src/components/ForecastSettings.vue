@@ -1,9 +1,27 @@
 <script setup lang="ts">
-import { INTENSITY_LABELS } from '@/lib/palette'
-import { INTENSITIES, type ForecastSettings } from '@/types'
+import { computed } from 'vue'
+import { formatRate, RADAR_LEVEL_CHOICES, radarColorCss } from '@/lib/radarScale'
+import type { ForecastSettings } from '@/types'
 
-defineProps<{ draft: ForecastSettings; preview: string }>()
+const props = defineProps<{ draft: ForecastSettings; preview: string }>()
 const emit = defineEmits<{ back: []; reset: []; save: [] }>()
+
+// The slider moves between the selectable radar colours; the track shows every colour they span.
+const first = RADAR_LEVEL_CHOICES[0].index
+const choice = computed({
+  get: () => Math.max(0, RADAR_LEVEL_CHOICES.findIndex((c) => c.index === props.draft.radar.minLevel)),
+  set: (position: number) => {
+    props.draft.radar.minLevel = RADAR_LEVEL_CHOICES[position]?.index ?? first
+  },
+})
+const selected = computed(() => RADAR_LEVEL_CHOICES[choice.value] ?? RADAR_LEVEL_CHOICES[0])
+// Every radar colour from the first to the last choice, placed so each choice sits under its stop.
+const last = RADAR_LEVEL_CHOICES[RADAR_LEVEL_CHOICES.length - 1]!.index
+const trackStops = Array.from(
+  { length: last - first + 1 },
+  (_, i) => `${radarColorCss(first + i)} ${((i / (last - first)) * 100).toFixed(1)}%`,
+)
+const trackStyle = { '--radar-track': `linear-gradient(90deg, ${trackStops.join(', ')})` }
 </script>
 
 <template>
@@ -32,11 +50,27 @@ const emit = defineEmits<{ back: []; reset: []; save: [] }>()
       </div>
       <div class="field">
         <label for="fc-intensity">Minimum intensity</label>
-        <select id="fc-intensity" v-model="draft.radar.minIntensity">
-          <option v-for="intensity in INTENSITIES" :key="intensity" :value="intensity">
-            {{ INTENSITY_LABELS[intensity] }}
-          </option>
-        </select>
+        <div class="intensity-scale radar-level-scale">
+          <output for="fc-intensity">
+            <i class="radar-swatch" :style="{ background: radarColorCss(selected.index) }" />
+            {{ selected.name }} · {{ formatRate(selected.index) }} and heavier
+          </output>
+          <input
+            id="fc-intensity"
+            v-model.number="choice"
+            class="intensity-slider radar-level-slider"
+            :style="trackStyle"
+            type="range"
+            min="0"
+            :max="RADAR_LEVEL_CHOICES.length - 1"
+            step="1"
+            aria-label="Minimum radar intensity"
+            :aria-valuetext="`${selected.name}, ${formatRate(selected.index)}`"
+          />
+          <div class="intensity-labels" aria-hidden="true">
+            <span v-for="level in RADAR_LEVEL_CHOICES" :key="level.index">{{ formatRate(level.index) }}</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -53,8 +87,8 @@ const emit = defineEmits<{ back: []; reset: []; save: [] }>()
       <div class="field">
         <label for="fc-types">Strike types</label>
         <select id="fc-types" v-model="draft.lightning.types">
-          <option value="cg">Cloud-to-ground only</option>
-          <option value="cg+cc">Ground + cloud</option>
+          <option value="cg">CG</option>
+          <option value="cg+cc">CG + CC</option>
         </select>
       </div>
     </div>

@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { distanceKm, latLonToNormalized } from './geo'
+import { distanceKm } from './geo'
 import {
   allClearRemaining,
-  areaLightningReading,
   countedStrikes,
-  evaluateAreaLightning,
   formatCountdown,
   latestStrikeInRing,
   mergeStrikes,
@@ -14,7 +12,7 @@ import {
   strikeAgeColor,
   strikeCounts,
 } from './lightning'
-import type { AlertArea, LiveLocation, Strike, StrikeType } from '@/types'
+import type { LiveLocation, Strike, StrikeType } from '@/types'
 
 const MIN = 60_000
 const NOW = Date.UTC(2026, 9, 1, 6, 30) // 14:30 SGT
@@ -142,79 +140,5 @@ describe('strike counts', () => {
       cg: { lt5: 2, lt15: 1, lt30: 0 },
       cc: { lt5: 0, lt15: 1, lt30: 2 },
     })
-  })
-})
-
-describe('watch area lightning reading', () => {
-  const square = [
-    { lat: 1.34, lon: 103.81 },
-    { lat: 1.34, lon: 103.83 },
-    { lat: 1.36, lon: 103.83 },
-    { lat: 1.36, lon: 103.81 },
-  ]
-
-  it('counts strikes inside the buffer by type and reports the nearest', () => {
-    const strikes = [strike(0, 1), strike(4, 2), strike(3, 1, 'cc'), strike(12, 1)]
-    const reading = areaLightningReading(square, strikes, NOW, 5, 'cg+cc', 15)
-    expect(reading.groundCount).toBe(2)
-    expect(reading.cloudCount).toBe(1)
-    expect(reading.nearestKm).toBe(0)
-  })
-
-  it('honours strike types and the time window', () => {
-    const strikes = [strike(3, 1, 'cc'), strike(3, 20)]
-    const reading = areaLightningReading(square, strikes, NOW, 5, 'cg', 15)
-    expect(reading).toMatchObject({ groundCount: 0, cloudCount: 0, nearestKm: null })
-  })
-})
-
-describe('watch area lightning alerts', () => {
-  // A small square around home, as 0–1 radar-image positions.
-  const area: AlertArea = {
-    id: 'area',
-    name: 'Home',
-    color: '#fff',
-    enabled: true,
-    vertices: [
-      { lat: 1.34, lon: 103.81 },
-      { lat: 1.34, lon: 103.83 },
-      { lat: 1.36, lon: 103.83 },
-      { lat: 1.36, lon: 103.81 },
-    ].map(latLonToNormalized),
-    intensityThreshold: 'moderate',
-    pixelThreshold: 20,
-    notifyNewCell: true,
-    lightningEnabled: true,
-    lightningBufferKm: 5,
-    lightningTypes: 'cg+cc',
-    openLiveOnAlert: true,
-  }
-
-  it('alerts once when strikes first appear within the buffer', () => {
-    const strikes = [strike(3, 2), strike(4, 1, 'cc'), strike(30, 1)]
-    const first = evaluateAreaLightning([area], strikes, NOW, 15, {}, 'live')
-    expect(first.next).toEqual({ area: true })
-    expect(first.events).toHaveLength(1)
-    expect(first.events[0]).toMatchObject({
-      reason: 'lightning',
-      groundCount: 1,
-      cloudCount: 1,
-      bufferKm: 5,
-      nearestType: 'cg',
-      openLive: true,
-    })
-    const second = evaluateAreaLightning([area], strikes, NOW, 15, first.next, 'live')
-    expect(second.events).toHaveLength(0)
-  })
-
-  it('re-arms after the window passes without strikes', () => {
-    const quiet = evaluateAreaLightning([area], [strike(3, 16)], NOW, 15, { area: true }, 'live')
-    expect(quiet.next).toEqual({ area: false })
-    expect(quiet.events).toHaveLength(0)
-  })
-
-  it('skips areas with lightning alerts off', () => {
-    const off = { ...area, lightningEnabled: false }
-    expect(evaluateAreaLightning([off], [strike(0, 1)], NOW, 15, {}, 'live').events).toEqual([])
   })
 })

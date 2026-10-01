@@ -89,19 +89,3 @@ export function convexHull(points: Point[]): Point[] {
   }
   return [...lower.slice(0, -1), ...upper.slice(0, -1)]
 }
-
-/**
- * Outline of a polygon grown by `km`, for drawing. It is the convex hull of the grown shape: exact
- * for convex areas and slightly generous for concave ones. Alerts use exact distances instead.
- */
-export function bufferOutline(polygon: LatLon[], km: number, steps = 24): LatLon[] {
-  const points: Point[] = []
-  for (const vertex of polygon) {
-    const p = project(vertex.lat, vertex.lon)
-    for (let i = 0; i < steps; i++) {
-      const angle = (2 * Math.PI * i) / steps
-      points.push({ x: p.x + km * Math.cos(angle), y: p.y + km * Math.sin(angle) })
-    }
-  }
-  return convexHull(points).map(unproject)
-}

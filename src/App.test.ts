@@ -146,53 +146,30 @@ describe('WeatherWatch app', () => {
     wrapper.unmount()
   })
 
-  it('raises a lightning alert from the test storm and links into Live', async () => {
-    window.location.hash = ''
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 2,
-        areas: [
-          {
-            id: 'central',
-            name: 'Central',
-            color: '#ffb454',
-            enabled: true,
-            vertices: [
-              { x: 0.4, y: 0.48 },
-              { x: 0.58, y: 0.48 },
-              { x: 0.58, y: 0.62 },
-              { x: 0.4, y: 0.62 },
-            ],
-            intensityThreshold: 'moderate',
-            pixelThreshold: 20,
-            notifyNewCell: true,
-            lightningEnabled: true,
-            lightningBufferKm: 5,
-            lightningTypes: 'cg',
-            openLiveOnAlert: true,
-          },
-        ],
-        history: [],
-        alertState: {},
-        settings: { monitoring: false, overlayOpacity: 0.8, soundAlerts: false, soundVolume: 70 },
-        liveLocations: [],
-        live: {},
-        lightningState: {},
-      }),
-    )
-    const wrapper = mount(App, { attachTo: document.body })
-    const stormButton = wrapper.findAll('.test-card button').find((b) => b.text() === 'Lightning storm')
-    await stormButton!.trigger('click')
+  it('runs the test storm from Live with strikes and radar', async () => {
+    window.location.hash = '#/live'
+    const wrapper = mountApp()
+    await flushPromises()
+    expect(wrapper.find('.test-card').exists()).toBe(false)
+    await wrapper.get('.test-storm-button').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('Test mode')
-    expect(wrapper.text()).toContain('Lightning nearby')
-    expect(wrapper.text()).toMatch(/\d+ ground within 5 km · (nearest|one inside the area)/)
-    expect(wrapper.get('.event-link').attributes('href')).toBe('#/live?focus=central&from=alert')
+    expect(wrapper.text()).toContain('TEST STORM · EXIT')
     expect(wrapper.findAll('.strike-mark').length).toBeGreaterThan(20)
-    // Test storms never touch the persisted lightning state.
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}').lightningState ?? {}).toEqual({})
+    expect(wrapper.find('.radar-underlay').exists()).toBe(true)
+    await wrapper.get('.test-storm-badge').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.test-storm-button').exists()).toBe(true)
+    expect(wrapper.find('.radar-underlay').exists()).toBe(false)
+    wrapper.unmount()
+    window.location.hash = ''
+  })
+
+  it('keeps Watch rain-only', () => {
+    window.location.hash = '#/watch'
+    const wrapper = mountApp()
+    expect(wrapper.get('main').text()).not.toMatch(/lightning/i)
+    expect(wrapper.findAll('.test-card button').map((b) => b.text())).toEqual(['Clear frame', 'Sample frame'])
     wrapper.unmount()
   })
 })

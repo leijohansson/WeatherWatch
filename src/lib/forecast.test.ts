@@ -12,12 +12,12 @@ import type { ForecastSettings, RadarFrame, Strike } from '@/types'
 
 const NOW = Date.UTC(2026, 9, 1, 6, 30)
 const settings: ForecastSettings = {
-  radar: { minClusterKm2: 10, distanceKm: 6, minIntensity: 'moderate' },
+  radar: { minClusterKm2: 10, distanceKm: 6, minLevel: 21 },
   lightning: { distanceKm: 15, windowMinutes: 15, types: 'cg' },
 }
 
-/** A 480 px frame with a square of moderate rain `size` px wide centred on lat/lon. */
-function frameWithBlob(lat: number, lon: number, size: number): RadarFrame {
+/** A 480 px frame with a square of rain `size` px wide centred on lat/lon, in radar colour `rgb`. */
+function frameWithBlob(lat: number, lon: number, size: number, rgb = [255, 138, 0]): RadarFrame {
   const width = 480
   const pixels = new Uint8ClampedArray(width * width * 4)
   const centre = latLonToNormalized({ lat, lon })
@@ -26,7 +26,7 @@ function frameWithBlob(lat: number, lon: number, size: number): RadarFrame {
   for (let y = cy - Math.floor(size / 2); y < cy - Math.floor(size / 2) + size; y++) {
     for (let x = cx - Math.floor(size / 2); x < cx - Math.floor(size / 2) + size; x++) {
       const o = (y * width + x) * 4
-      pixels.set([0, 215, 40, 255], o)
+      pixels.set([...rgb, 255], o)
     }
   }
   return { source: 'test', timestamp: '', url: '', width, height: width, pixels }
@@ -54,14 +54,17 @@ describe('radar clusters', () => {
   it('keeps clusters at or above the minimum size', () => {
     const big = findRadarClusters(frameWithBlob(1.35, 103.82, 4), settings.radar)
     expect(big).toHaveLength(1)
-    expect(big[0]).toMatchObject({ id: 'C1', label: 'CLUSTER C1', maxIntensity: 'moderate' })
+    expect(big[0]).toMatchObject({ id: 'C1', label: 'CLUSTER C1', maxLevel: 23 })
     expect(big[0]!.areaKm2).toBeGreaterThan(10)
     expect(findRadarClusters(frameWithBlob(1.35, 103.82, 2), settings.radar)).toHaveLength(0)
   })
 
-  it('ignores rain below the minimum intensity', () => {
-    const heavyOnly = { ...settings.radar, minIntensity: 'heavy' as const }
-    expect(findRadarClusters(frameWithBlob(1.35, 103.82, 6), heavyOnly)).toHaveLength(0)
+  it('ignores rain below the minimum radar colour', () => {
+    // Yellow (index 20) is just below the lightest selectable level, light orange (21).
+    expect(findRadarClusters(frameWithBlob(1.35, 103.82, 6, [255, 198, 0]), settings.radar)).toHaveLength(0)
+    expect(findRadarClusters(frameWithBlob(1.35, 103.82, 6, [255, 178, 0]), settings.radar)).toHaveLength(1)
+    const redOnly = { ...settings.radar, minLevel: 27 }
+    expect(findRadarClusters(frameWithBlob(1.35, 103.82, 6), redOnly)).toHaveLength(0)
   })
 })
 

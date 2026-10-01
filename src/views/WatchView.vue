@@ -3,12 +3,10 @@ import { computed, ref } from 'vue'
 import AlertHistory from '@/components/AlertHistory.vue'
 import AreaEditor from '@/components/AreaEditor.vue'
 import RadarMap from '@/components/RadarMap.vue'
-import { AREA_LIGHTNING_DEFAULTS, type AppState } from '@/composables/usePersistence'
-import type { useLightningFeed } from '@/composables/useLightningFeed'
+import type { AppState } from '@/composables/usePersistence'
 import type { useNotifications } from '@/composables/useNotifications'
 import type { useRadarMonitor } from '@/composables/useRadarMonitor'
 import { parseCompactTimestamp } from '@/lib/alertText'
-import type { AreaLightningReading } from '@/lib/lightning'
 import { INTENSITY_LABELS } from '@/lib/palette'
 import type { AlertArea, Point } from '@/types'
 
@@ -16,9 +14,6 @@ const props = defineProps<{
   state: AppState
   monitor: ReturnType<typeof useRadarMonitor>
   notifications: ReturnType<typeof useNotifications>
-  feed: ReturnType<typeof useLightningFeed>
-  lightningReadings: Record<string, AreaLightningReading>
-  now: number
 }>()
 
 const selectedId = ref<string | null>(props.state.areas[0]?.id ?? null)
@@ -36,15 +31,6 @@ const rainyAreaIds = computed(
         .map(([id]) => id),
     ),
 )
-const lightningAreaIds = computed(
-  () =>
-    new Set(
-      Object.entries(props.lightningReadings)
-        .filter(([, reading]) => reading.groundCount + reading.cloudCount > 0)
-        .map(([id]) => id),
-    ),
-)
-const testMode = computed(() => props.monitor.testMode.value || props.feed.testMode.value)
 
 function startDrawing() {
   drawing.value = true
@@ -63,7 +49,6 @@ function finishDrawing() {
     intensityThreshold: 'moderate',
     pixelThreshold: 20,
     notifyNewCell: true,
-    ...AREA_LIGHTNING_DEFAULTS,
   }
   props.state.areas.push(area)
   props.monitor.reanalyzeArea(area.id)
@@ -89,11 +74,6 @@ function deleteSelected() {
 function moveVertex(areaId: string, index: number, point: Point) {
   const area = props.state.areas.find((candidate) => candidate.id === areaId)
   if (area?.vertices[index]) area.vertices[index] = point
-}
-
-function leaveTestMode() {
-  if (props.monitor.testMode.value) props.monitor.leaveTestMode()
-  if (props.feed.testMode.value) void props.feed.leaveFixture()
 }
 
 function formatTimestamp(timestamp: string | null) {
@@ -146,8 +126,6 @@ function formatTimestamp(timestamp: string | null) {
         :overlay-url="monitor.visibleOverlay.value"
         :overlay-opacity="state.overlayOpacity"
         :rainy-area-ids="rainyAreaIds"
-        :strikes="feed.strikes.value"
-        :now="now"
         @select="selectedId = $event"
         @deselect="selectedId = null"
         @map-click="draft.push($event)"
@@ -161,7 +139,7 @@ function formatTimestamp(timestamp: string | null) {
           <i class="legend-gradient" />
           <span>INTENSE</span>
         </div>
-        <span>Singapore time · Radar every 3 min · Lightning every minute</span>
+        <span>Singapore time · Refreshes every 3 min</span>
       </div>
     </section>
 
@@ -206,15 +184,13 @@ function formatTimestamp(timestamp: string | null) {
             >
               <i :style="{ background: area.color }" />
               <span>{{ area.name }}</span>
-              <small v-if="lightningAreaIds.has(area.id)" class="act">LIGHTNING</small>
-              <small v-else-if="rainyAreaIds.has(area.id)">RAIN</small>
+              <small v-if="rainyAreaIds.has(area.id)">RAIN</small>
             </button>
           </div>
           <AreaEditor
             v-if="selectedArea"
             :area="selectedArea"
             :reading="monitor.visibleReadings.value[selectedArea.id]"
-            :lightning="lightningReadings[selectedArea.id]"
             @change="monitor.reanalyzeArea(selectedArea.id)"
             @delete="deleteSelected"
           />
@@ -232,11 +208,10 @@ function formatTimestamp(timestamp: string | null) {
               <span>
                 <strong>{{ area.name }}</strong>
                 <small>
-                  {{ area.enabled ? 'Enabled' : 'Paused' }} · {{ INTENSITY_LABELS[area.intensityThreshold] }}+ · {{ area.pixelThreshold }} px{{ area.lightningEnabled ? ` · lightning ${area.lightningBufferKm} km` : '' }}
+                  {{ area.enabled ? 'Enabled' : 'Paused' }} · {{ INTENSITY_LABELS[area.intensityThreshold] }}+ · {{ area.pixelThreshold }} px
                 </small>
               </span>
-              <em v-if="lightningAreaIds.has(area.id)" class="act">LIGHTNING</em>
-              <em v-else-if="rainyAreaIds.has(area.id)">RAIN</em>
+              <em v-if="rainyAreaIds.has(area.id)">RAIN</em>
             </button>
           </div>
           <div v-else class="empty-areas">
@@ -253,20 +228,17 @@ function formatTimestamp(timestamp: string | null) {
           <span class="pulse-dot" :class="{ active: state.monitoring }" />
           <div>
             <strong>Automatic monitoring</strong>
-            <small>Radar every 3 minutes · lightning every minute</small>
+            <small>Refreshes every 3 minutes to catch delayed images</small>
           </div>
           <input v-model="state.monitoring" type="checkbox" aria-label="Automatic monitoring" />
         </div>
         <p v-if="monitor.lastError.value" class="status-message">
           {{ monitor.lastError.value }}
         </p>
-        <p v-if="feed.lastError.value" class="status-message">
-          {{ feed.lastError.value }}
-        </p>
         <label class="toggle-row sound-alert-toggle">
           <span>
             <strong>Sound alerts</strong>
-            <small>Play a sound when rain or lightning triggers an alert</small>
+            <small>Play a sound when rain triggers an alert</small>
           </span>
           <input v-model="state.soundAlerts" type="checkbox" aria-label="Sound alerts" />
         </label>
@@ -305,17 +277,22 @@ function formatTimestamp(timestamp: string | null) {
         </button>
       </section>
 
-      <section class="test-card" :class="{ active: testMode }">
+      <section class="test-card" :class="{ active: monitor.testMode.value }">
         <header>
           <div>
             <p class="eyebrow">Demonstration</p>
             <h3>Test your alerts</h3>
           </div>
-          <button v-if="testMode" class="text-button" type="button" @click="leaveTestMode">
+          <button
+            v-if="monitor.testMode.value"
+            class="text-button"
+            type="button"
+            @click="monitor.leaveTestMode"
+          >
             Exit test
           </button>
         </header>
-        <p>Try the bundled radar or a recorded storm without affecting live state.</p>
+        <p>Try the bundled radar without affecting live rain state.</p>
         <div class="button-row">
           <button class="secondary-button" type="button" @click="monitor.useClearFrame">
             Clear frame
@@ -324,9 +301,6 @@ function formatTimestamp(timestamp: string | null) {
             Sample frame
           </button>
         </div>
-        <button class="check-button" type="button" @click="feed.useFixture">
-          Lightning storm
-        </button>
       </section>
 
       <AlertHistory :events="state.history" @clear="state.history = []" />

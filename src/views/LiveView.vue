@@ -12,7 +12,7 @@ import { useOfficialForecast } from '@/composables/useOfficialForecast'
 import { defaultLiveSettings, newLiveLocation, type AppState } from '@/composables/usePersistence'
 import type { useRadarMonitor } from '@/composables/useRadarMonitor'
 import { routeHash, type Route } from '@/composables/useRoute'
-import { formatClock, parseCompactTimestamp } from '@/lib/alertText'
+import { formatClock } from '@/lib/alertText'
 import {
   catExpectsLightning,
   classifySectors,
@@ -23,7 +23,7 @@ import {
   sectorCounts,
   type SectorClass,
 } from '@/lib/forecast'
-import { centroid, LAT0, LON0, normalizedToLatLon } from '@/lib/geo'
+import { centroid, LAT0, LON0 } from '@/lib/geo'
 import { formatAgo, formatKm, latestStrikeInRing, STRIKE_TYPE_LABELS, strikeAgeMinutes } from '@/lib/lightning'
 import { featurePolygons, labelAnchorKm, outerRings, pathKm } from '@/lib/mapGeometry'
 import type { ForecastSettings, LatLon, LiveLocation, RingState, SectorSet } from '@/types'
@@ -107,45 +107,26 @@ const mapLocations = computed(() => {
 
 // ---- Focus and the deep-link chip ---------------------------------------------------------
 
-const focusedArea = computed(() => props.state.areas.find((a) => a.id === props.route.focus) ?? null)
 const focusedLocation = computed(
   () => props.state.liveLocations.find((l) => l.id === props.route.focus) ?? null,
 )
 
 const mapCentre = computed<LatLon>(() => {
   if (focusedLocation.value) return focusedLocation.value
-  if (focusedArea.value) {
-    const c = centroid(focusedArea.value.vertices.map(normalizedToLatLon))
-    if (c) return c
-  }
   return centroid(props.state.liveLocations) ?? { lat: LAT0, lon: LON0 }
 })
 const focusKey = computed(() => `${props.route.focus ?? ''}|${props.route.fromAlert}`)
 
+/** Shown when a ring notification opened Live. */
 const chip = computed(() => {
-  if (!props.route.fromAlert) return null
-  if (focusedLocation.value) {
-    const inRing = latestStrikeInRing(focusedLocation.value, props.feed.strikes.value)
-    if (!inRing) return { time: null, text: `${focusedLocation.value.name} · no strike inside the ring now` }
-    return {
-      time: formatClock(inRing.strike.time),
-      text: `${STRIKE_TYPE_LABELS[inRing.strike.type]} strike ${formatKm(inRing.distanceKm)} from ${focusedLocation.value.name}`,
-    }
+  const location = focusedLocation.value
+  if (!props.route.fromAlert || !location) return null
+  const inRing = latestStrikeInRing(location, props.feed.strikes.value)
+  if (!inRing) return { time: null, text: `${location.name} · no strike inside the ring now` }
+  return {
+    time: formatClock(inRing.strike.time),
+    text: `${STRIKE_TYPE_LABELS[inRing.strike.type]} strike ${formatKm(inRing.distanceKm)} from ${location.name}`,
   }
-  if (focusedArea.value) {
-    const event = props.state.history.find(
-      (e) => e.reason === 'lightning' && e.areaId === focusedArea.value?.id,
-    )
-    if (event?.reason !== 'lightning') return { time: null, text: focusedArea.value.name }
-    const date = parseCompactTimestamp(event.timestamp)
-    return {
-      time: date ? formatClock(date) : null,
-      text: event.nearestKm
-        ? `${STRIKE_TYPE_LABELS[event.nearestType]} strike ${formatKm(event.nearestKm)} from ${event.areaName}`
-        : `${STRIKE_TYPE_LABELS[event.nearestType]} strike inside ${event.areaName}`,
-    }
-  }
-  return null
 })
 
 function dismissChip() {
@@ -185,6 +166,14 @@ const clusters = computed(() => {
   return frame ? findRadarClusters(frame, props.state.live.forecast.radar) : []
 })
 
+// Past these ages the published status is too old to call a Discrepancy against.
+const TWO_HOUR_MAX_AGE_MS = 2 * 60 * 60_000
+const ARMY_CAT_MAX_AGE_MS = 30 * 60_000
+const isFresh = (updated: number | null, maxAge: number) =>
+  updated !== null && classifyNow.value - updated < maxAge
+const twoHourFresh = computed(() => isFresh(official.twoHourUpdated.value, TWO_HOUR_MAX_AGE_MS))
+const armyFresh = computed(() => isFresh(official.armyUpdated.value, ARMY_CAT_MAX_AGE_MS))
+
 function classify(set: SectorSet, settings: ForecastSettings): Record<string, SectorClass> {
   const frame = props.monitor.visibleFrame.value
   const clusterSet =
@@ -194,8 +183,12 @@ function classify(set: SectorSet, settings: ForecastSettings): Record<string, Se
     rings: sector.rings,
     forecastLightning:
       set === 'town'
-        ? forecastExpectsLightning(official.twoHour.value?.byArea[sector.forecastArea])
-        : catExpectsLightning(official.armyCat.value?.[sector.name]),
+        ? twoHourFresh.value
+          ? forecastExpectsLightning(official.twoHour.value?.byArea[sector.forecastArea])
+          : null
+        : armyFresh.value
+          ? catExpectsLightning(official.armyCat.value?.[sector.name])
+          : null,
   }))
   return classifySectors(inputs, clusterSet, props.feed.strikes.value, classifyNow.value, settings)
 }
@@ -247,6 +240,66 @@ const forecastPreview = computed(() => {
   return `${name}: ${counts.discrepancy} discrepancy · ${counts.thunderstorm} thunderstorm · ${counts.clear} clear`
 })
 
+// ---- Live data health ---------------------------------------------------------------------
+
+/** One line per source that isn't delivering live information right now. */
+const dataWarnings = computed(() => {
+  const warnings: string[] = []
+  const since = (time: number | null) => (time === null ? null : formatClock(time))
+  const feed = props.feed
+  if (!feed.testMode.value && (feed.status.value === 'error' || feed.status.value === 'offline')) {
+    const last = since(feed.lastUpdated.value)
+    warnings.push(
+      last
+        ? `Not getting live lightning. Strikes shown are as of ${last}.`
+        : 'Not getting live lightning. No strikes have been received yet.',
+    )
+  }
+  const monitor = props.monitor
+  if (!monitor.testMode.value && (monitor.lastError.value || monitor.radarIsStale.value)) {
+    const age = monitor.radarAgeMinutes.value
+    warnings.push(
+      age === null
+        ? 'Not getting live radar. No radar image has been received yet.'
+        : `Not getting live radar. The overlay and clusters are ${age} min old.`,
+    )
+  }
+  if (forecastOn.value && layers.value.sectors === 'town' && (official.twoHourFailed.value || !twoHourFresh.value)) {
+    const last = since(official.twoHourUpdated.value)
+    warnings.push(
+      twoHourFresh.value && last
+        ? `Not getting the live 2-hour forecast. Discrepancy uses the forecast from ${last}.`
+        : 'Not getting the live 2-hour forecast. Townships show Thunderstorm or Clear only.',
+    )
+  }
+  if (forecastOn.value && layers.value.sectors === 'army') {
+    const last = since(official.armyUpdated.value)
+    if (!official.armyConfigured.value) {
+      warnings.push('SafeGuardian isn\'t configured on this server. Army sectors show Thunderstorm or Clear only.')
+    } else if (official.armyFailed.value || !armyFresh.value) {
+      warnings.push(
+        armyFresh.value && last
+          ? `Not getting live SafeGuardian CAT status. Discrepancy uses the status from ${last}.`
+          : 'Not getting live SafeGuardian CAT status. Army sectors show Thunderstorm or Clear only.',
+      )
+    }
+  }
+  return warnings
+})
+
+// ---- Test storm ---------------------------------------------------------------------------
+
+/** Replays the recorded storm with matching radar, so strikes, overlay and clusters can be tried. */
+function startTestStorm() {
+  void props.feed.useFixture()
+  void props.monitor.useStormFrame()
+}
+
+function exitTestStorm() {
+  void props.feed.leaveFixture()
+  props.monitor.leaveTestMode()
+}
+
 // ---- Toolbar ------------------------------------------------------------------------------
 
 const toolbarTime = computed(() => {
@@ -286,13 +339,16 @@ watch(
           <strong>{{ toolbarTime }}</strong>
         </div>
         <div class="live-toolbar-right">
-          <button v-if="feed.testMode.value" class="test-storm-badge" type="button" @click="feed.leaveFixture">
+          <button v-if="feed.testMode.value" class="test-storm-badge" type="button" @click="exitTestStorm">
             TEST STORM · EXIT
           </button>
+          <button v-else class="test-storm-button" type="button" @click="startTestStorm">Test storm</button>
           <span class="toolbar-note">STRIKES UPDATE EVERY 2 MIN</span>
         </div>
       </div>
-      <p v-if="feed.lastError.value" class="status-message live-error">{{ feed.lastError.value }}</p>
+      <ul v-if="dataWarnings.length" class="data-warnings" role="status">
+        <li v-for="warning in dataWarnings" :key="warning">{{ warning }}</li>
+      </ul>
 
       <LiveMap
         :locations="mapLocations"
@@ -318,7 +374,7 @@ watch(
           </div>
           <div v-if="chip" class="alert-chip" role="status">
             <div>
-              <small>FROM WATCH ALERT{{ chip.time ? ` · ${chip.time}` : '' }}</small>
+              <small>FROM ALERT{{ chip.time ? ` · ${chip.time}` : '' }}</small>
               <strong>{{ chip.text }}</strong>
             </div>
             <button type="button" class="chip-dismiss" aria-label="Dismiss" @click="dismissChip">✕</button>
@@ -345,12 +401,6 @@ watch(
           </span>
         </div>
       </div>
-      <p
-        v-if="forecastOn && layers.sectors === 'army' && !official.armyConfigured.value"
-        class="legend-note"
-      >
-        Army discrepancy needs SafeGuardian, which isn't configured on this server.
-      </p>
     </section>
 
     <aside class="control-panel live-panel" :class="`panel-${panel}`">

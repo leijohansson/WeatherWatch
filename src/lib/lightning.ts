@@ -1,15 +1,5 @@
-import { distanceKm, distanceToPolygonKm, normalizedToLatLon } from './geo'
-import { radarTimestamp } from './timestamps'
-import type {
-  AlertArea,
-  LatLon,
-  LightningAlertEvent,
-  LightningTypes,
-  LiveLocation,
-  RingState,
-  Strike,
-  StrikeType,
-} from '@/types'
+import { distanceKm } from './geo'
+import type { LightningTypes, LiveLocation, RingState, Strike, StrikeType } from '@/types'
 
 export const STRIKE_AGE_STEP_MIN = 2.5
 export const STRIKE_WINDOW_MIN = 30
@@ -123,102 +113,6 @@ export function strikeCounts(strikes: Strike[], now: number): StrikeCounts {
     counts[strike.type][bucket] += 1
   }
   return counts
-}
-
-export interface AreaLightningReading {
-  groundCount: number
-  cloudCount: number
-  nearestKm: number | null
-  nearestType: StrikeType | null
-  latestTime: number | null
-}
-
-/** Strikes within `bufferKm` of a polygon (inside counts as 0 km) in the last `windowMinutes`. */
-export function areaLightningReading(
-  polygon: LatLon[],
-  strikes: Strike[],
-  now: number,
-  bufferKm: number,
-  types: LightningTypes,
-  windowMinutes: number,
-): AreaLightningReading {
-  const reading: AreaLightningReading = {
-    groundCount: 0,
-    cloudCount: 0,
-    nearestKm: null,
-    nearestType: null,
-    latestTime: null,
-  }
-  if (polygon.length < 3) return reading
-  for (const strike of strikes) {
-    if (!typeAllowed(strike.type, types)) continue
-    if (strikeAgeMinutes(strike, now) >= windowMinutes) continue
-    const distance = distanceToPolygonKm(strike, polygon)
-    if (distance > bufferKm) continue
-    if (strike.type === 'cg') reading.groundCount += 1
-    else reading.cloudCount += 1
-    if (reading.nearestKm === null || distance < reading.nearestKm) {
-      reading.nearestKm = distance
-      reading.nearestType = strike.type
-    }
-    if (reading.latestTime === null || strike.time > reading.latestTime) reading.latestTime = strike.time
-  }
-  return reading
-}
-
-export function readAreaLightning(
-  area: AlertArea,
-  strikes: Strike[],
-  now: number,
-  windowMinutes: number,
-): AreaLightningReading {
-  return areaLightningReading(
-    area.vertices.map(normalizedToLatLon),
-    strikes,
-    now,
-    area.lightningBufferKm,
-    area.lightningTypes,
-    windowMinutes,
-  )
-}
-
-/**
- * Watch-mode lightning trigger. An area alerts when strikes first appear within its buffer, and can
- * alert again once it has had none for `windowMinutes` (the same rule as the Live all-clear).
- */
-export function evaluateAreaLightning(
-  areas: AlertArea[],
-  strikes: Strike[],
-  now: number,
-  windowMinutes: number,
-  previous: Record<string, boolean>,
-  source: LightningAlertEvent['source'],
-): { next: Record<string, boolean>; events: LightningAlertEvent[] } {
-  const next: Record<string, boolean> = {}
-  const events: LightningAlertEvent[] = []
-  const timestamp = radarTimestamp(new Date(now))
-  for (const area of areas) {
-    if (!area.enabled || !area.lightningEnabled) continue
-    const reading = readAreaLightning(area, strikes, now, windowMinutes)
-    const active = reading.groundCount + reading.cloudCount > 0
-    next[area.id] = active
-    if (!active || previous[area.id] || reading.nearestKm === null || !reading.nearestType) continue
-    events.push({
-      id: `${area.id}-${timestamp}-lightning`,
-      areaId: area.id,
-      areaName: area.name,
-      reason: 'lightning',
-      timestamp,
-      source,
-      groundCount: reading.groundCount,
-      cloudCount: reading.cloudCount,
-      bufferKm: area.lightningBufferKm,
-      nearestKm: reading.nearestKm,
-      nearestType: reading.nearestType,
-      openLive: area.openLiveOnAlert,
-    })
-  }
-  return { next, events }
 }
 
 export function formatCountdown(ms: number): string {

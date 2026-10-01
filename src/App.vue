@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, toRef, watch } from 'vue'
+import { computed, nextTick, ref, toRef, watch } from 'vue'
 import ModeTabs from '@/components/ModeTabs.vue'
 import StatusPill from '@/components/StatusPill.vue'
 import { useLightningFeed } from '@/composables/useLightningFeed'
@@ -9,10 +9,9 @@ import { useNow } from '@/composables/useNow'
 import { usePersistence } from '@/composables/usePersistence'
 import { useRadarMonitor } from '@/composables/useRadarMonitor'
 import { routeHash, useRoute, type Mode } from '@/composables/useRoute'
-import { evaluateAreaLightning, readAreaLightning, type AreaLightningReading } from '@/lib/lightning'
 import LiveView from '@/views/LiveView.vue'
 import WatchView from '@/views/WatchView.vue'
-import type { AlertEvent, Strike } from '@/types'
+import type { AlertEvent } from '@/types'
 
 const state = usePersistence()
 const notifications = useNotifications(toRef(state, 'soundAlerts'), toRef(state, 'soundVolume'))
@@ -33,29 +32,16 @@ const monitor = useRadarMonitor({
   notifyFailure: notifications.sendRadarFailure,
 })
 
-// Test-mode lightning state stays in memory so a demo storm never touches live alert state.
-const testLightningState = reactive<Record<string, boolean>>({})
+// Set after the first batch of strikes has settled, so a storm already under way on page load
+// doesn't send ring notifications.
 const feedReady = ref(false)
 
-function onLightningUpdate(strikes: Strike[], source: 'live' | 'test') {
-  const previous = source === 'live' ? state.lightningState : testLightningState
-  const { next, events } = evaluateAreaLightning(
-    state.areas,
-    strikes,
-    Date.now(),
-    state.live.allClearMinutes,
-    previous,
-    source,
-  )
-  for (const key of Object.keys(previous)) delete previous[key]
-  Object.assign(previous, next)
-  if (events.length) addEvents(events)
-  if (!feedReady.value) void nextTick(() => (feedReady.value = true))
-}
-
+// Strikes keep coming in while on Watch so Live's ring alerts and the tab's dot stay current.
 const feed = useLightningFeed({
   enabled: computed(() => state.monitoring || route.value.mode === 'live'),
-  onUpdate: onLightningUpdate,
+  onUpdate: () => {
+    if (!feedReady.value) void nextTick(() => (feedReady.value = true))
+  },
 })
 
 const liveAlerts = useLiveAlerts({
@@ -68,18 +54,14 @@ const liveAlerts = useLiveAlerts({
   notify: notifications.sendLive,
 })
 
-const lightningReadings = computed(() => {
-  const readings: Record<string, AreaLightningReading> = {}
-  for (const area of state.areas) {
-    if (!area.lightningEnabled) continue
-    readings[area.id] = readAreaLightning(area, feed.strikes.value, now.value, state.live.allClearMinutes)
-  }
-  return readings
-})
-
 function selectMode(mode: Mode) {
   navigate(routeHash(mode))
 }
+
+// Leaving test mode from Watch also ends Live's test storm, so the two never disagree.
+watch(monitor.testMode, (testing) => {
+  if (!testing && feed.testMode.value) void feed.leaveFixture()
+})
 
 // Each mode starts at the top, rather than at the other mode's scroll position.
 watch(
@@ -99,7 +81,7 @@ watch(
       <div class="header-actions">
         <StatusPill
           :status="route.mode === 'live' ? feed.status.value : monitor.status.value"
-          :test-mode="feed.testMode.value || (route.mode === 'watch' && monitor.testMode.value)"
+          :test-mode="route.mode === 'live' ? feed.testMode.value || monitor.testMode.value : monitor.testMode.value"
           :subject="route.mode === 'live' ? 'lightning' : 'radar'"
         />
         <div class="notification-control">
@@ -134,9 +116,6 @@ watch(
         :state="state"
         :monitor="monitor"
         :notifications="notifications"
-        :feed="feed"
-        :lightning-readings="lightningReadings"
-        :now="now"
       />
     </main>
 

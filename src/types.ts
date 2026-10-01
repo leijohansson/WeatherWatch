@@ -13,10 +13,6 @@ export interface AlertArea {
   intensityThreshold: Intensity
   pixelThreshold: number
   notifyNewCell: boolean
-  lightningEnabled: boolean
-  lightningBufferKm: number
-  lightningTypes: LightningTypes
-  openLiveOnAlert: boolean
 }
 
 export interface RadarFrame {
@@ -41,35 +37,19 @@ export interface AreaReading {
   rainy: boolean
 }
 
-export type RainAlertReason = 'entry' | 'escalation' | 'new-cell'
-export type AlertReason = RainAlertReason | 'lightning'
+export type AlertReason = 'entry' | 'escalation' | 'new-cell'
 
-interface AlertEventBase {
+export interface AlertEvent {
   id: string
   areaId: string
   areaName: string
+  reason: AlertReason
   timestamp: string
-  source: 'live' | 'test'
-}
-
-export interface RainAlertEvent extends AlertEventBase {
-  reason: RainAlertReason
   thresholdIntensity?: Intensity
   intensity: Intensity
   pixelCount: number
+  source: 'live' | 'test'
 }
-
-export interface LightningAlertEvent extends AlertEventBase {
-  reason: 'lightning'
-  groundCount: number
-  cloudCount: number
-  bufferKm: number
-  nearestKm: number
-  nearestType: StrikeType
-  openLive: boolean
-}
-
-export type AlertEvent = RainAlertEvent | LightningAlertEvent
 
 export interface AreaAlertState {
   rainy: boolean
@@ -113,7 +93,8 @@ export interface LiveLayers {
 }
 
 export interface ForecastSettings {
-  radar: { minClusterKm2: number; distanceKm: number; minIntensity: Intensity }
+  /** minLevel indexes the radar colour table in lib/radarScale. */
+  radar: { minClusterKm2: number; distanceKm: number; minLevel: number }
   lightning: { distanceKm: number; windowMinutes: number; types: LightningTypes }
 }
 
@@ -135,7 +116,7 @@ export interface PersistedSettings {
 
 export interface PersistedStateV1 {
   version: 1
-  areas: Omit<AlertArea, 'lightningEnabled' | 'lightningBufferKm' | 'lightningTypes' | 'openLiveOnAlert'>[]
+  areas: AlertArea[]
   history: AlertEvent[]
   alertState: Record<string, AreaAlertState>
   settings: PersistedSettings
@@ -149,7 +130,6 @@ export interface PersistedState {
   settings: PersistedSettings
   liveLocations: LiveLocation[]
   live: LiveSettings
-  lightningState: Record<string, boolean>
 }
 
 export type MonitoringStatus =

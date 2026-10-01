@@ -107,7 +107,9 @@ describe('live deep link', () => {
     window.location.hash = '#/live?focus=home&from=alert'
     const wrapper = mount(App, { attachTo: document.body })
     await flushPromises()
-    expect(wrapper.get('.alert-chip').text()).toContain('FROM WATCH ALERT')
+    expect(wrapper.get('.alert-chip').text()).toContain('FROM ALERT')
+    // There's no backend in tests, so the lightning feed fails and Live says so.
+    expect(wrapper.get('.data-warnings').text()).toContain('Not getting live lightning')
     expect(wrapper.get('.alert-chip').text()).toContain('Home')
     await wrapper.get('.chip-dismiss').trigger('click')
     await flushPromises()

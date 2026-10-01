@@ -2,8 +2,8 @@ import { connectedComponents } from './detection'
 import { convexHull, distanceToPolygonKm, normalizedToLatLon, project, RADAR_BOUNDS, unproject } from './geo'
 import { pointInPolygon } from './geometry'
 import { strikeAgeMinutes, typeAllowed } from './lightning'
-import { classifyRadarColor, meetsIntensity } from './palette'
-import type { ForecastSettings, Intensity, LatLon, RadarFrame, Strike } from '@/types'
+import { radarLevel } from './radarScale'
+import type { ForecastSettings, LatLon, RadarFrame, Strike } from '@/types'
 
 export type SectorClass = 'discrepancy' | 'thunderstorm' | 'clear'
 
@@ -26,7 +26,8 @@ export interface RadarClusterShape {
   id: string
   label: string
   areaKm2: number
-  maxIntensity: Intensity
+  /** Heaviest radar colour in the cluster, as an index into lib/radarScale. */
+  maxLevel: number
   /** Convex outline, for drawing. */
   outline: LatLon[]
   /** Centres of the cluster's edge pixels, for distance checks. */
@@ -40,7 +41,7 @@ export function pixelAreaKm2(frame: Pick<RadarFrame, 'width' | 'height'>): numbe
   return ((b.x - a.x) / frame.width) * ((b.y - a.y) / frame.height)
 }
 
-/** Connected rain areas at or above `minIntensity` and at least `minClusterKm2`, largest first. */
+/** Connected rain areas at or above the `minLevel` radar colour and at least `minClusterKm2`, largest first. */
 export function findRadarClusters(
   frame: RadarFrame,
   settings: ForecastSettings['radar'],
@@ -53,20 +54,20 @@ export function findRadarClusters(
   const y1 = Math.min(frame.height - 1, Math.ceil(((north - box.south) / (north - south)) * frame.height))
 
   const qualifying = new Set<number>()
-  const intensities = new Map<number, Intensity>()
+  const levels = new Map<number, number>()
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
       const index = y * frame.width + x
       const o = index * 4
-      const intensity = classifyRadarColor(
+      const level = radarLevel(
         frame.pixels[o] ?? 0,
         frame.pixels[o + 1] ?? 0,
         frame.pixels[o + 2] ?? 0,
         frame.pixels[o + 3] ?? 0,
       )
-      if (!intensity || !meetsIntensity(intensity, settings.minIntensity)) continue
+      if (level === null || level < settings.minLevel) continue
       qualifying.add(index)
-      intensities.set(index, intensity)
+      levels.set(index, level)
     }
   }
 
@@ -74,7 +75,8 @@ export function findRadarClusters(
   const toLatLon = (x: number, y: number) =>
     normalizedToLatLon({ x: x / frame.width, y: y / frame.height })
 
-  return connectedComponents(qualifying, frame.width, (i) => intensities.get(i) ?? settings.minIntensity)
+  // The intensity callback only feeds connectedComponents' four-step summary, which isn't used here.
+  return connectedComponents(qualifying, frame.width, () => 'light')
     .filter((cluster) => cluster.size * pixelKm2 >= settings.minClusterKm2)
     .map((cluster, index) => {
       const members = new Set(cluster.pixels)
@@ -97,7 +99,7 @@ export function findRadarClusters(
         id: `C${index + 1}`,
         label: `CLUSTER C${index + 1}`,
         areaKm2: cluster.size * pixelKm2,
-        maxIntensity: cluster.maxIntensity,
+        maxLevel: Math.max(...cluster.pixels.map((pixel) => levels.get(pixel) ?? 0)),
         outline: convexHull(corners).map(unproject),
         edge,
       }

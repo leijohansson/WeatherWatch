@@ -1,5 +1,5 @@
 import { reactive, watch } from 'vue'
-import { INTENSITIES } from '@/types'
+import { DEFAULT_RADAR_LEVEL, isRadarLevelChoice } from '@/lib/radarScale'
 import type {
   AlertArea,
   AreaAlertState,
@@ -13,13 +13,6 @@ import type {
 // The key keeps its original name so existing browsers keep their data across the rename.
 const STORAGE_KEY = 'rainwatch-singapore:v1'
 const PERSIST_DELAY_MS = 250
-
-export const AREA_LIGHTNING_DEFAULTS = {
-  lightningEnabled: true,
-  lightningBufferKm: 5,
-  lightningTypes: 'cg',
-  openLiveOnAlert: true,
-} satisfies Partial<AlertArea>
 
 const defaultArea = (): AlertArea => ({
   id: crypto.randomUUID(),
@@ -35,7 +28,6 @@ const defaultArea = (): AlertArea => ({
   intensityThreshold: 'moderate',
   pixelThreshold: 20,
   notifyNewCell: true,
-  ...AREA_LIGHTNING_DEFAULTS,
 })
 
 export function newLiveLocation(overrides: Partial<LiveLocation> = {}): LiveLocation {
@@ -67,7 +59,7 @@ export function defaultLiveSettings(): LiveSettings {
       radarOpacity: 0.35,
     },
     forecast: {
-      radar: { minClusterKm2: 10, distanceKm: 6, minIntensity: 'moderate' },
+      radar: { minClusterKm2: 10, distanceKm: 6, minLevel: DEFAULT_RADAR_LEVEL },
       lightning: { distanceKm: 15, windowMinutes: 15, types: 'cg' },
     },
   }
@@ -83,7 +75,6 @@ export interface AppState {
   soundVolume: number
   liveLocations: LiveLocation[]
   live: LiveSettings
-  lightningState: Record<string, boolean>
 }
 
 function defaults(): AppState {
@@ -97,38 +88,45 @@ function defaults(): AppState {
     soundVolume: 70,
     liveLocations: [newLiveLocation({ name: 'Central Singapore' })],
     live: defaultLiveSettings(),
-    lightningState: {},
   }
 }
 
-/** v1 → v2: adds Live mode settings and locations, and the lightning trigger fields on areas. */
+/** v1 → v2: adds Live mode settings and locations. */
 export function migrateV1(state: PersistedStateV1): PersistedState {
   return {
     version: 2,
-    // Existing areas opt in to lightning alerts explicitly so an upgrade doesn't start new notifications.
-    areas: state.areas.map((area) => ({ ...AREA_LIGHTNING_DEFAULTS, ...area, lightningEnabled: false })),
+    areas: state.areas,
     history: Array.isArray(state.history) ? state.history : [],
     alertState: state.alertState ?? {},
     settings: state.settings,
     liveLocations: [newLiveLocation({ name: 'Central Singapore' })],
     live: defaultLiveSettings(),
-    lightningState: {},
   }
+}
+
+// Early v2 builds let Watch areas alert on lightning; Watch is rain-only again, so drop those parts.
+const RAIN_REASONS = new Set(['entry', 'escalation', 'new-cell'])
+const LEGACY_AREA_FIELDS = ['lightningEnabled', 'lightningBufferKm', 'lightningTypes', 'openLiveOnAlert']
+
+function rainOnlyArea(area: AlertArea): AlertArea {
+  const copy: Record<string, unknown> = { ...area }
+  for (const field of LEGACY_AREA_FIELDS) delete copy[field]
+  return copy as unknown as AlertArea
 }
 
 function mergeLiveSettings(saved: Partial<LiveSettings> | undefined): LiveSettings {
   const base = defaultLiveSettings()
-  const minIntensity = saved?.forecast?.radar?.minIntensity
+  const minLevel = saved?.forecast?.radar?.minLevel
   return {
     allClearEnabled: saved?.allClearEnabled ?? base.allClearEnabled,
     allClearMinutes: saved?.allClearMinutes ?? base.allClearMinutes,
     layers: { ...base.layers, ...saved?.layers },
     forecast: {
       radar: {
-        ...base.forecast.radar,
-        ...saved?.forecast?.radar,
-        minIntensity:
-          minIntensity && INTENSITIES.includes(minIntensity) ? minIntensity : base.forecast.radar.minIntensity,
+        minClusterKm2: saved?.forecast?.radar?.minClusterKm2 ?? base.forecast.radar.minClusterKm2,
+        distanceKm: saved?.forecast?.radar?.distanceKm ?? base.forecast.radar.distanceKm,
+        // Older builds stored a four-step minIntensity instead; those fall back to the default.
+        minLevel: isRadarLevelChoice(minLevel) ? minLevel : base.forecast.radar.minLevel,
       },
       lightning: { ...base.forecast.lightning, ...saved?.forecast?.lightning },
     },
@@ -144,8 +142,10 @@ export function readPersistedState(storage: Pick<Storage, 'getItem'> = localStor
     if (parsed.version === 1) parsed = migrateV1(parsed)
     if (parsed.version !== 2) return defaults()
     return {
-      areas: parsed.areas.map((area) => ({ ...AREA_LIGHTNING_DEFAULTS, ...area })),
-      history: Array.isArray(parsed.history) ? parsed.history : [],
+      areas: parsed.areas.map(rainOnlyArea),
+      history: Array.isArray(parsed.history)
+        ? parsed.history.filter((event) => RAIN_REASONS.has(event.reason))
+        : [],
       alertState: parsed.alertState ?? {},
       monitoring: parsed.settings?.monitoring ?? true,
       overlayOpacity: parsed.settings?.overlayOpacity ?? 0.82,
@@ -155,7 +155,6 @@ export function readPersistedState(storage: Pick<Storage, 'getItem'> = localStor
         ? parsed.liveLocations.map((location) => newLiveLocation(location))
         : [],
       live: mergeLiveSettings(parsed.live),
-      lightningState: parsed.lightningState ?? {},
     }
   } catch {
     return defaults()
@@ -181,7 +180,6 @@ export function usePersistence() {
       },
       liveLocations: state.liveLocations,
       live: state.live,
-      lightningState: state.lightningState,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted))
   }

@@ -50,17 +50,10 @@ describe('persistence', () => {
       settings: { monitoring: false, overlayOpacity: 0.7, soundAlerts: true, soundVolume: 40 },
     }
 
-    it('adds lightning fields to areas without turning lightning alerts on', () => {
+    it('keeps areas as they are', () => {
       const migrated = migrateV1(v1)
       expect(migrated.version).toBe(2)
-      expect(migrated.areas[0]).toMatchObject({
-        name: 'Home',
-        pixelThreshold: 9,
-        lightningEnabled: false,
-        lightningBufferKm: 5,
-        lightningTypes: 'cg',
-        openLiveOnAlert: true,
-      })
+      expect(migrated.areas).toEqual(v1.areas)
     })
 
     it('adds Live defaults and keeps existing state', () => {
@@ -70,16 +63,15 @@ describe('persistence', () => {
       expect(migrated.live.allClearEnabled).toBe(true)
       expect(migrated.live.allClearMinutes).toBe(15)
       expect(migrated.live.layers).toMatchObject({ sectors: 'town', radarOpacity: 0.35 })
-      expect(migrated.live.forecast.radar.minIntensity).toBe('moderate')
+      expect(migrated.live.forecast.radar.minLevel).toBe(21)
       expect(migrated.liveLocations).toHaveLength(1)
     })
 
     it('reads a stored v1 document as v2 state', () => {
       const state = readPersistedState({ getItem: () => JSON.stringify(v1) })
-      expect(state.areas[0]?.lightningEnabled).toBe(false)
+      expect(state.areas[0]?.name).toBe('Home')
       expect(state.soundVolume).toBe(40)
       expect(state.live.layers.cg).toBe(true)
-      expect(state.lightningState).toEqual({})
     })
 
     it('fills settings missing from a partial v2 document', () => {
@@ -87,6 +79,23 @@ describe('persistence', () => {
       const state = readPersistedState({ getItem: () => JSON.stringify(partial) })
       expect(state.live.layers).toMatchObject({ sectors: 'army', cc: true, radarOpacity: 0.35 })
       expect(state.live.forecast.lightning.distanceKm).toBe(15)
+    })
+
+    it('drops Watch lightning from early v2 data', () => {
+      const early = {
+        ...migrateV1(v1),
+        areas: [{ ...v1.areas[0], lightningEnabled: true, lightningBufferKm: 5, lightningTypes: 'cg', openLiveOnAlert: true }],
+        history: [
+          { id: 'a', reason: 'lightning', areaId: 'home', areaName: 'Home', timestamp: '', source: 'live' },
+          { id: 'b', reason: 'entry', areaId: 'home', areaName: 'Home', timestamp: '', source: 'live', intensity: 'heavy', pixelCount: 3 },
+        ],
+        live: { forecast: { radar: { minClusterKm2: 12, distanceKm: 6, minIntensity: 'moderate' } } },
+        lightningState: { home: true },
+      }
+      const state = readPersistedState({ getItem: () => JSON.stringify(early) })
+      expect(state.areas[0]).toEqual(v1.areas[0])
+      expect(state.history.map((event) => event.id)).toEqual(['b'])
+      expect(state.live.forecast.radar).toEqual({ minClusterKm2: 12, distanceKm: 6, minLevel: 21 })
     })
   })
 })

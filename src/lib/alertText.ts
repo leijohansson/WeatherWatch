@@ -1,6 +1,5 @@
-import { formatKm } from './lightning'
 import { INTENSITY_LABELS } from './palette'
-import type { AlertEvent, LightningAlertEvent, RainAlertEvent } from '@/types'
+import type { AlertEvent } from '@/types'
 
 export function liveHref(focusId: string, fromAlert = true): string {
   const params = new URLSearchParams({ focus: focusId })
@@ -8,23 +7,7 @@ export function liveHref(focusId: string, fromAlert = true): string {
   return `#/live?${params.toString()}`
 }
 
-export function strikeCountText(ground: number, cloud: number): string {
-  const parts = [`${ground} ground`]
-  if (cloud) parts.push(`${cloud} cloud`)
-  return parts.join(' + ')
-}
-
-/** "nearest 2.2 km", or "one inside the area" when the nearest strike is inside it. */
-export function nearestText(km: number): string {
-  return km === 0 ? 'one inside the area' : `nearest ${formatKm(km)}`
-}
-
-/** "3 ground + 5 cloud within 5 km · nearest 2.2 km" */
-export function lightningDetail(event: LightningAlertEvent): string {
-  return `${strikeCountText(event.groundCount, event.cloudCount)} within ${event.bufferKm} km · ${nearestText(event.nearestKm)}`
-}
-
-export function rainDetail(event: RainAlertEvent, suffix = 'threshold'): string {
+export function rainDetail(event: AlertEvent, suffix = 'threshold'): string {
   const threshold = event.thresholdIntensity ?? event.intensity
   return threshold === event.intensity
     ? `${INTENSITY_LABELS[threshold]} ${suffix}`
@@ -35,7 +18,6 @@ export const REASON_LABELS: Record<AlertEvent['reason'], string> = {
   entry: 'Rain entered',
   escalation: 'Intensity increased',
   'new-cell': 'New rain cell',
-  lightning: 'Lightning nearby',
 }
 
 /** Compact "YYYYMMDDHHmm…" timestamps (radar frames and alert events) as a Date. */

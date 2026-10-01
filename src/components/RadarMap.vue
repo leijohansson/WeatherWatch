@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 import baseMapUrl from '../../assets/map_240km_v2.jpg'
-import { bufferOutline, latLonToNormalized, normalizedToLatLon } from '@/lib/geo'
 import { clientToNormalized, pointsAttribute } from '@/lib/geometry'
-import { FRESH_STRIKE_MIN, strikeAgeColor, strikeAgeMinutes } from '@/lib/lightning'
-import { strikePath } from '@/lib/strikeShapes'
-import type { AlertArea, Point, Strike } from '@/types'
+import type { AlertArea, Point } from '@/types'
 
 const props = defineProps<{
   areas: AlertArea[]
@@ -15,8 +12,6 @@ const props = defineProps<{
   overlayUrl: string | null
   overlayOpacity: number
   rainyAreaIds: Set<string>
-  strikes?: Strike[]
-  now?: number
 }>()
 
 const emit = defineEmits<{
@@ -85,32 +80,6 @@ onBeforeUnmount(() => {
 })
 
 const draftPoints = computed(() => pointsAttribute(props.draft))
-
-const bufferRings = computed(() =>
-  props.areas
-    .filter((area) => area.enabled && area.lightningEnabled && area.lightningBufferKm > 0)
-    .map((area) => ({
-      id: area.id,
-      color: area.color,
-      points: pointsAttribute(
-        bufferOutline(area.vertices.map(normalizedToLatLon), area.lightningBufferKm).map(latLonToNormalized),
-      ),
-    })),
-)
-
-// Cloud-to-cloud under cloud-to-ground; oldest first so the newest sit on top.
-const strikeMarks = computed(() => {
-  const now = props.now ?? Date.now()
-  return [...(props.strikes ?? [])]
-    .sort((a, b) => (a.type === b.type ? a.time - b.time : a.type === 'cc' ? -1 : 1))
-    .flatMap((strike) => {
-      const age = strikeAgeMinutes(strike, now)
-      const color = strikeAgeColor(age)
-      if (!color) return []
-      const { x, y } = latLonToNormalized(strike)
-      return [{ id: strike.id, color, d: strikePath(strike.type, x * 100, y * 100, age < FRESH_STRIKE_MIN, 0.16) }]
-    })
-})
 </script>
 
 <template>
@@ -134,13 +103,6 @@ const strikeMarks = computed(() => {
       crossorigin="anonymous"
     />
     <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Alert areas">
-      <polygon
-        v-for="ring in bufferRings"
-        :key="`buffer-${ring.id}`"
-        :points="ring.points"
-        :stroke="ring.color"
-        class="buffer-ring"
-      />
       <g v-for="area in areas" :key="area.id" :class="{ disabled: !area.enabled }">
         <polygon
           class="area-shape"
@@ -167,13 +129,6 @@ const strikeMarks = computed(() => {
           />
         </template>
       </g>
-      <path
-        v-for="mark in strikeMarks"
-        :key="mark.id"
-        :d="mark.d"
-        :fill="mark.color"
-        class="strike-mark"
-      />
       <polyline v-if="draft.length" :points="draftPoints" class="draft-line" />
       <circle
         v-for="(vertex, index) in draft"

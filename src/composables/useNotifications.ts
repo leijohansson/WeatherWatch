@@ -1,6 +1,6 @@
 import { computed, ref, type Ref } from 'vue'
 import alertSoundUrl from '../../assets/alert.wav'
-import { lightningDetail, liveHref, rainDetail } from '@/lib/alertText'
+import { rainDetail } from '@/lib/alertText'
 import type { AlertEvent } from '@/types'
 
 export function useNotifications(soundAlerts?: Ref<boolean>, soundVolume?: Ref<number>) {
@@ -124,24 +124,15 @@ export function useNotifications(soundAlerts?: Ref<boolean>, soundVolume?: Ref<n
 
   function send(event: AlertEvent) {
     const prefix = event.source === 'test' ? 'Test · ' : ''
-    const tag = `${event.source}-${event.areaId}-${event.reason}`
-    if (event.reason === 'lightning') {
-      show(
-        `${prefix}${event.areaName}`,
-        { body: `Lightning nearby · ${lightningDetail(event)}`, tag },
-        event.openLive ? liveHref(event.areaId) : undefined,
-      )
-    } else {
-      const reason = {
-        entry: 'Rain entered your area',
-        escalation: 'Rain intensity increased',
-        'new-cell': 'A new rain cell appeared',
-      }[event.reason]
-      show(`${prefix}${event.areaName}`, {
-        body: `${reason} · ${rainDetail(event, 'threshold met')} · ${event.pixelCount} qualifying pixels`,
-        tag,
-      })
-    }
+    const reason = {
+      entry: 'Rain entered your area',
+      escalation: 'Rain intensity increased',
+      'new-cell': 'A new rain cell appeared',
+    }[event.reason]
+    show(`${prefix}${event.areaName}`, {
+      body: `${reason} · ${rainDetail(event, 'threshold met')} · ${event.pixelCount} qualifying pixels`,
+      tag: `${event.source}-${event.areaId}-${event.reason}`,
+    })
     playAlertSound()
   }
 
